@@ -44,6 +44,8 @@ typedef struct {
   char *source;
   char *ptr;
   int line;
+  int token;
+  s_symbol *symbol;
 } s_parser;
 
 typedef enum {
@@ -87,14 +89,14 @@ s_parser *parse_InitFromFile(s_scope *scope, char *filename, int sizeLimit) {
   return ret;
 }
 
-int parse_next(s_parser *parser, s_symbol **foundSymbol) {
+int parse_Next(s_parser *parser) {
   #define src parser->ptr
+  #define ret(TOKEN, SYMBOL) { parser->symbol = (SYMBOL); parser->token = (TOKEN); return (TOKEN); }
+
   int token;                    // current token
   int token_val;                // value of current token (mainly for number)
   char *last_pos;
   int hash;
-
-  *foundSymbol = NULL;
 
   while (token = *src) {
     ++src;
@@ -125,8 +127,7 @@ int parse_next(s_parser *parser, s_symbol **foundSymbol) {
         if (symbol_ptr->hash) {
           if (!memcmp(symbol_ptr->name, last_pos, src - last_pos)) {
             // Found symbol, return it
-            *foundSymbol = symbol_ptr;
-            return symbol_ptr->token;
+            ret(symbol_ptr->token, symbol_ptr);
           }
         }
         symbol_ptr++;
@@ -137,8 +138,7 @@ int parse_next(s_parser *parser, s_symbol **foundSymbol) {
       symbol_ptr->hash = hash;
       symbol_ptr->token = Id;
       
-      *foundSymbol = symbol_ptr;
-      return symbol_ptr->token;
+      ret(token, symbol_ptr);
     }
     else if (token >= '0' && token <= '9') {
       // parse number, three kinds: dec(123) hex(0x123) oct(017)
@@ -165,12 +165,44 @@ int parse_next(s_parser *parser, s_symbol **foundSymbol) {
         }
       }
 
-      token = Num;
-      return;
+      ret(token, NULL);
     }
   }
 
-  return token;
+  ret(token, NULL);
+}
+
+int parse_Match(s_parser *parser, int token) {
+  if (parser->token == token) {
+    parse_Next(parser);
+  } else {
+    printf("%d: expected token: %d\n", parser->line, token);
+    exit(-1);
+  }
+}
+
+/* ##### Expression ##### /*
+
+/* ##### Compiler ##### */
+typedef struct {
+  s_parser *parser;
+  void *text;
+  void *data;
+} s_compiler;
+
+s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
+  s_compiler *ret = (s_compiler *)malloc(sizeof(s_compiler));
+  if (!ret) { PERROR("compiler_Init", "Could not malloc compiler"); return NULL; }
+
+  ret->parser = parser;
+
+  return ret;
+}
+
+int compiler_Next(s_compiler *compiler) {
+  int token = parse_Next(compiler->parser);
+
+
 }
 
 /* ##### MAIN town ##### */
@@ -192,7 +224,6 @@ int main() {
   const int poolsize = 256 * 1024; // arbitrary size
 
   rootScope = scope_Init(poolsize);
-  s_symbol *_found_symbol;
 
   // Init scope with keywords
   const char *keywords = "char else enum if int return sizeof while";
@@ -200,14 +231,14 @@ int main() {
 
   int i = Char;
   while (i <= While) {
-    parse_next(_parser, &_found_symbol);
-    _found_symbol->token = i++;
+    parse_Next(_parser);
+    _parser->symbol->token = i++;
   }
 
   // Source code parser
   s_parser *parser = parse_InitFromFile(rootScope, srcFilename, poolsize);
 
-  int tok = parse_next(parser, &_found_symbol);
+  int tok = parse_Next(parser);
   printf("token: %d [%c]\n", tok, tok);
 
   return 0;
