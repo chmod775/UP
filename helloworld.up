@@ -37,8 +37,8 @@ Actuator.Motor {
 	_temp : Int;
 }
 
-M1 : Actuator.Motor;
-P1 : Actuator.Motor.Pump;
+m1 : Actuator.Motor;
+p1 : Actuator.Motor.Pump;
 cnt : Int;
 
 cnt++;

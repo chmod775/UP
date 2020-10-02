@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #define PERROR(A, B, ...) printf("[" A "] Error! - " B "\n", ##__VA_ARGS__);
 
@@ -14,6 +15,13 @@ void closeFile(FILE *fd) {
   if (fclose(fd) != 0)
     PERROR("closeFile", "could not close file");
 }
+
+bool isUppercase_Char(char ch) { return (ch >= 'A' && ch <= 'Z'); }
+bool isUppercase_String(char *str) { return isUppercase_Char(str[0]); }
+
+bool isFullcase_String(char *str) { return isUppercase_Char(str[0]) && isUppercase_Char(str[1]); }
+
+bool startsUnderscore_String(char *str) { return str[0] == '_'; }
 
 /* ##### Scope ##### */
 typedef struct {
@@ -40,12 +48,17 @@ s_scope *scope_Init(int sizeLimit) {
 
 /* ##### Parser ##### */
 typedef struct {
+  int type;
+  int64_t value;
+  s_symbol *symbol;
+} s_token;
+
+typedef struct {
   s_scope *scope;
   char *source;
   char *ptr;
   int line;
-  int token;
-  s_symbol *symbol;
+  s_token token;
 } s_parser;
 
 typedef enum {
@@ -91,7 +104,7 @@ s_parser *parse_InitFromFile(s_scope *scope, char *filename, int sizeLimit) {
 
 int parse_Next(s_parser *parser) {
   #define src parser->ptr
-  #define ret(TOKEN, SYMBOL) { parser->symbol = (SYMBOL); parser->token = (TOKEN); return (TOKEN); }
+  #define ret(TOKEN, VALUE, SYMBOL) { parser->token.symbol = (SYMBOL); parser->token.value = (VALUE); parser->token.type = (TOKEN); return (TOKEN); }
 
   int token;                    // current token
   int token_val;                // value of current token (mainly for number)
@@ -127,7 +140,7 @@ int parse_Next(s_parser *parser) {
         if (symbol_ptr->hash) {
           if (!memcmp(symbol_ptr->name, last_pos, src - last_pos)) {
             // Found symbol, return it
-            ret(symbol_ptr->token, symbol_ptr);
+            ret(symbol_ptr->token, last_pos, symbol_ptr);
           }
         }
         symbol_ptr++;
@@ -138,7 +151,7 @@ int parse_Next(s_parser *parser) {
       symbol_ptr->hash = hash;
       symbol_ptr->token = Id;
       
-      ret(token, symbol_ptr);
+      ret(Id, last_pos, symbol_ptr);
     }
     else if (token >= '0' && token <= '9') {
       // parse number, three kinds: dec(123) hex(0x123) oct(017)
@@ -165,15 +178,21 @@ int parse_Next(s_parser *parser) {
         }
       }
 
-      ret(token, NULL);
+      ret(token, token_val, NULL);
+    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == ']' || token == ',' || token == ':') {
+      // directly return the character as token;
+      ret(token, NULL, NULL);
     }
   }
 
-  ret(token, NULL);
+  ret(token, NULL, NULL);
+
+  #undef ret
+  #undef src
 }
 
 int parse_Match(s_parser *parser, int token) {
-  if (parser->token == token) {
+  if (parser->token.type == token) {
     parse_Next(parser);
   } else {
     printf("%d: expected token: %d\n", parser->line, token);
@@ -199,11 +218,62 @@ s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
   return ret;
 }
 
-int compiler_Next(s_compiler *compiler) {
-  int token = parse_Next(compiler->parser);
+#define token (compiler->parser->token)
+#define match(A) parse_Match(compiler->parser, (A))
 
+int compiler_StatementDefinition(s_compiler *compiler) {
 
 }
+
+int compiler_ClassDefinition(s_compiler *compiler) {
+  char *class_name = (char *)token.value;
+  char *parent_name = NULL;
+
+  if (token.type == ':') { // Has parent
+    match(':');
+
+    match(Id);
+
+    parent_name = (char *)token.value;
+  }
+
+  if (token.type == '.') { // Is children
+    match('.');
+
+    match(Id);
+
+    parent_name = class_name;
+    class_name = (char *)token.value;
+  }
+
+  match('{');
+}
+
+int compiler_Next(s_compiler *compiler) {
+  if (token.type == Id) {
+    char *token_val = (char *)token.value;
+    bool isUppercase = isUppercase_String(token_val);
+    bool isFullcase = isFullcase_String(token_val);
+    bool startsUnderscore = startsUnderscore_String(token_val);
+
+    match(Id);
+
+    if (isUppercase) { // Only class
+      compiler_ClassDefinition(compiler);
+    } else if (isFullcase) { // Constant property
+
+    } else if (startsUnderscore) { // Private property
+
+    } else { // Property or Method
+
+    }
+  }
+
+  parse_Next(compiler->parser);
+}
+
+#undef match
+#undef token
 
 /* ##### MAIN town ##### */
 s_scope *rootScope;
@@ -232,14 +302,20 @@ int main() {
   int i = Char;
   while (i <= While) {
     parse_Next(_parser);
-    _parser->symbol->token = i++;
+    _parser->token.symbol->token = i++;
   }
 
   // Source code parser
   s_parser *parser = parse_InitFromFile(rootScope, srcFilename, poolsize);
 
+  // Compiler
+  s_compiler *compiler = compiler_Init(parser, poolsize);
+
   int tok = parse_Next(parser);
+  
   printf("token: %d [%c]\n", tok, tok);
+
+  compiler_Next(compiler);
 
   return 0;
 }
