@@ -95,6 +95,10 @@ s_parser *parse_Init(s_scope *scope, char *str) {
   return ret;
 }
 
+bool parse_IsTokenBasicType(s_token token) {
+  return (token.type >= Char) && (token.type <= Unsigned);
+}
+
 s_parser *parse_InitFromFile(s_scope *scope, char *filename, int sizeLimit) {
   // Open source file
   FILE *fd = openFile(filename);
@@ -200,7 +204,7 @@ int parse_Next(s_parser *parser) {
       }
 
       ret(token, token_val, NULL);
-    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == ']' || token == ',' || token == ':' || token == '.') {
+    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',' || token == ':' || token == '.') {
       // directly return the character as token;
       ret(token, NULL, NULL);
     }
@@ -232,7 +236,7 @@ typedef struct {
 } s_anytype;
 
 typedef struct {
-  s_symbol *key;
+  int key;
   s_anytype *value;
 } s_dictionarytype;
 
@@ -261,80 +265,11 @@ s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
 #define token (compiler->parser->token)
 #define match(A) parse_Match(compiler->parser, (A))
 
-int compiler_Expression(s_compiler *compiler) {
+void compiler_Expression(s_compiler *compiler) {
 
 }
 
-int compiler_VariableType(s_compiler *compiler) {
-  if (token.type == Id) {
-
-  }
-}
-
-int compiler_StatementDefinition(s_compiler *compiler) {
-  // Statements types:
-  // 1. if (...) <statement> [else <statement>]
-  // 2. for (...) <statement>
-  // 3. while (...) <statement>
-  // 4. { <statement> }
-  // 5. return xxx;
-  // 6. <empty statement>;
-  // 7. variable : type [ = initialization];
-  // 8. function(...) : type { statement }
-  // 9. expression; (expression end with semicolon)
-
-  if (token.type == If) {
-
-  } else if (token.type == For) {
-
-  } else if (token.type == While) {
-
-  } else if (token.type == '{') {
-    // Block statement
-    match('{');
-
-    while (token.type != '}') {
-      compiler_StatementDefinition(compiler);
-    }
-
-    match('}');
-  } else if (token.type == Return) {
-
-  } else if (token.type == ';') {
-    // Empty statement
-    match(';');
-  } else if (token.type == Id) {
-    s_symbol *name_symbol = token.symbol;
-    match(Id);
-
-    if (token.type == ':') {
-      // Variable definition
-      match(':');
-
-      if (token.type == Id) {
-
-      } else {
-
-      }
-
-
-    } else if (token.type == '(') {
-      // Function definition
-      match('(');
-
-    } else {
-      // Expression (espresso ?)
-      compiler_Expression(compiler);
-      match(';');
-    }
-  } else {
-    // Expression (espresso ?)
-    compiler_Expression(compiler);
-    match(';');
-  }
-}
-
-int compiler_ClassDefinition(s_compiler *compiler) {
+void compiler_ClassDefinition(s_compiler *compiler) {
   s_symbol *class_symbol = token.symbol;
   s_symbol *parent_symbol = NULL;
 
@@ -357,22 +292,139 @@ int compiler_ClassDefinition(s_compiler *compiler) {
     match(Id);
   }
 
-  compiler_StatementDefinition(compiler);
+  compiler_Statement(compiler);
 }
 
-int compiler_Next(s_compiler *compiler) {
-  if (token.type == Id) {
+s_anytype *compiler_VariableType(s_compiler *compiler) {
+  s_anytype *ret = (s_anytype *)malloc(sizeof(s_anytype));
+
+  ret->isDictionary = false;
+  ret->isList = false;
+  ret->type = NULL;
+
+  if (parse_IsTokenBasicType(token)) {
+    // Basic type
+    ret->type = token.type;
+    match(token.type);
+  } else if (token.type == '[') {
+    // List
+    match('[');
+
+    s_listtype *ltype = (s_listtype *)malloc(sizeof(s_listtype));
+    ltype->items = compiler_VariableType(compiler);
+
+    ret->isList = true;
+    ret->type = ltype;
+
+    match(']');
+  } else if (token.type == '{') {
+    // Dictionary
+    match('{');
+
+    if (!parse_IsTokenBasicType(token)) {
+      PERROR("compiler_VariableType", "Dictionary key can only be a Basic type");
+      exit(-1);
+    }
+
+    s_dictionarytype *dtype = (s_dictionarytype *)malloc(sizeof(s_dictionarytype));
+    dtype->key = token.type;
+    match(token.type);
+
+    match(',');
+
+    dtype->value = compiler_VariableType(compiler);
+
+    ret->isDictionary = true;
+    ret->type = dtype;
+
+    match('}');
+  } else {
+    PERROR("compiler_VariableType", "Unsupported complex variable definition");
+    exit(-1);
+  }
+
+  return ret;
+}
+
+void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
+  match('(');
+
+
+
+}
+
+void compiler_VariableDefinition(s_compiler *compiler, s_symbol *name) {
+  match(':');
+
+  s_anytype *type = compiler_VariableType(compiler);
+
+  return;
+}
+
+void compiler_Statement(s_compiler *compiler) {
+  // Statements types:
+  // 1. if (...) <statement> [else <statement>]
+  // 2. for (...) <statement>
+  // 3. while (...) <statement>
+  // 4. { <statement> }
+  // 5. return xxx;
+  // 6. <empty statement>;
+  // 7. variable : type [ = initialization];
+  // 8. function(...) : type { statement }
+  // 9. expression; (expression end with semicolon)
+
+  if (token.type == If) {
+
+  } else if (token.type == For) {
+
+  } else if (token.type == While) {
+
+  } else if (token.type == '{') {
+    // Block statement
+    match('{');
+
+    while (token.type != '}') {
+      compiler_Statement(compiler);
+    }
+
+    match('}');
+  } else if (token.type == Return) {
+
+  } else if (token.type == ';') {
+    // Empty statement
+    match(';');
+  } else if (token.type == Id) {
     if (token.symbol->isUppercase) { // Only class
       compiler_ClassDefinition(compiler);
     } else if (token.symbol->isFullcase) { // Constant property
 
     } else if (token.symbol->startsUnderscore) { // Private property
 
-    } else { // Property or Method
+    } else {
+      s_symbol *name_symbol = token.symbol;
+      match(Id);
 
+      if (token.type == ':') {
+        // Variable definition
+        compiler_VariableDefinition(compiler, name_symbol);
+      } else if (token.type == '(') {
+        // Function definition
+        compiler_FunctionDefinition(compiler, name_symbol);
+      } else {
+        // Expression (espresso ?)
+        compiler_Expression(compiler);
+        match(';');
+      }
     }
+  } else {
+    // Expression (espresso ?)
+    compiler_Expression(compiler);
+    match(';');
   }
+}
 
+void compiler_Next(s_compiler *compiler) {
+  compiler_Statement(compiler);
   parse_Next(compiler->parser);
 }
 

@@ -1,6 +1,6 @@
 Actuator {
-	name : String;
-	value : Int;
+	name : {String,Float};
+	value : [String];
 }
 
 // Customized class, same as a children
