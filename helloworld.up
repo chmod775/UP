@@ -10,16 +10,6 @@ Motor : Actuator {
 
 // Children of Actuator
 Actuator.Motor {
-	// Static
-	Pump {
-		pressure : Int;
-	}
-
-	// Error, inheritance
-	EV.Pump {
-		pressure : Int;
-	}
-
 	// Public
 	direction : Bool;
 	phases : [String] = ['L1', 'L2', 'L3']; // Array
@@ -29,7 +19,7 @@ Actuator.Motor {
 	MAX_PHASES : Int = 3;
 
 	// Method
-	getDirection(a : String, b : Int, c : Actuator) {
+	getDirection(a : String, b : Int, c : Actuator) : Int {
 
 	}
 

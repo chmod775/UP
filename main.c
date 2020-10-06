@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define PERROR(A, B, ...) printf("[" A "] Error! - " B "\n", ##__VA_ARGS__);
 
@@ -23,15 +24,29 @@ bool isFullcase_String(char *str) { return isUppercase_Char(str[0]) && isUpperca
 
 bool startsUnderscore_String(char *str) { return str[0] == '_'; }
 
-/* ##### Scope ##### */
+/* ##### Symbols ##### */
 typedef struct {
-  char *name;
   int hash;
+  char *name;
+  int length;
+
   int type;
   int token;
   void *value;
+
+  bool isUppercase;
+  bool isFullcase;
+  bool startsUnderscore;
 } s_symbol;
 
+char *symbol_GetCleanName(s_symbol *symbol) {
+  char *ret = (char *)malloc(sizeof(char) * (symbol->length + 1));
+  memcpy(ret, symbol->name, symbol->length);
+  ret[symbol->length] = 0;
+  return ret;
+}
+
+/* ##### Scope ##### */
 typedef struct {
   s_symbol *symbols;
 } s_scope;
@@ -62,8 +77,9 @@ typedef struct {
 } s_parser;
 
 typedef enum {
-  Num = 128, Fun, Sys, Glo, Loc, Id, Class,
-  Char, Else, Enum, If, Int, Return, Sizeof, While,
+  Num = 128, Fun, Sys, Glo, Loc, Id, Class, Var,
+  Char, Short, Int, Long, Float, Double, String, Bool, Unsigned,
+  Else, Enum, If, Return, Sizeof, While, For, Switch,
   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
 } e_token;
 
@@ -147,9 +163,14 @@ int parse_Next(s_parser *parser) {
       }
 
       // No symbol found, create one
-      symbol_ptr->name = last_pos;
       symbol_ptr->hash = hash;
+      symbol_ptr->name = last_pos;
+      symbol_ptr->length = src - last_pos;
       symbol_ptr->token = Id;
+      
+      symbol_ptr->isUppercase = isUppercase_String(last_pos);
+      symbol_ptr->isFullcase = isFullcase_String(last_pos);
+      symbol_ptr->startsUnderscore = startsUnderscore_String(last_pos);
       
       ret(Id, last_pos, symbol_ptr);
     }
@@ -179,7 +200,7 @@ int parse_Next(s_parser *parser) {
       }
 
       ret(token, token_val, NULL);
-    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == ']' || token == ',' || token == ':') {
+    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == ']' || token == ',' || token == ':' || token == '.') {
       // directly return the character as token;
       ret(token, NULL, NULL);
     }
@@ -195,10 +216,29 @@ int parse_Match(s_parser *parser, int token) {
   if (parser->token.type == token) {
     parse_Next(parser);
   } else {
-    printf("%d: expected token: %d\n", parser->line, token);
+    if (token < Num)
+      printf("%d: expected token: %c\n", parser->line, token);
+    else
+      printf("%d: expected token: %d\n", parser->line, token);
     exit(-1);
   }
 }
+
+/* ##### Types ##### */
+typedef struct {
+  bool isDictionary;
+  bool isList;
+  void *type;
+} s_anytype;
+
+typedef struct {
+  s_symbol *key;
+  s_anytype *value;
+} s_dictionarytype;
+
+typedef struct {
+  s_anytype *items;
+} s_listtype;
 
 /* ##### Expression ##### /*
 
@@ -221,48 +261,112 @@ s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
 #define token (compiler->parser->token)
 #define match(A) parse_Match(compiler->parser, (A))
 
-int compiler_StatementDefinition(s_compiler *compiler) {
+int compiler_Expression(s_compiler *compiler) {
 
 }
 
+int compiler_VariableType(s_compiler *compiler) {
+  if (token.type == Id) {
+
+  }
+}
+
+int compiler_StatementDefinition(s_compiler *compiler) {
+  // Statements types:
+  // 1. if (...) <statement> [else <statement>]
+  // 2. for (...) <statement>
+  // 3. while (...) <statement>
+  // 4. { <statement> }
+  // 5. return xxx;
+  // 6. <empty statement>;
+  // 7. variable : type [ = initialization];
+  // 8. function(...) : type { statement }
+  // 9. expression; (expression end with semicolon)
+
+  if (token.type == If) {
+
+  } else if (token.type == For) {
+
+  } else if (token.type == While) {
+
+  } else if (token.type == '{') {
+    // Block statement
+    match('{');
+
+    while (token.type != '}') {
+      compiler_StatementDefinition(compiler);
+    }
+
+    match('}');
+  } else if (token.type == Return) {
+
+  } else if (token.type == ';') {
+    // Empty statement
+    match(';');
+  } else if (token.type == Id) {
+    s_symbol *name_symbol = token.symbol;
+    match(Id);
+
+    if (token.type == ':') {
+      // Variable definition
+      match(':');
+
+      if (token.type == Id) {
+
+      } else {
+
+      }
+
+
+    } else if (token.type == '(') {
+      // Function definition
+      match('(');
+
+    } else {
+      // Expression (espresso ?)
+      compiler_Expression(compiler);
+      match(';');
+    }
+  } else {
+    // Expression (espresso ?)
+    compiler_Expression(compiler);
+    match(';');
+  }
+}
+
 int compiler_ClassDefinition(s_compiler *compiler) {
-  char *class_name = (char *)token.value;
-  char *parent_name = NULL;
+  s_symbol *class_symbol = token.symbol;
+  s_symbol *parent_symbol = NULL;
+
+  match(Id);
 
   if (token.type == ':') { // Has parent
     match(':');
 
-    match(Id);
+    parent_symbol = token.symbol;
 
-    parent_name = (char *)token.value;
+    match(Id);
   }
 
   if (token.type == '.') { // Is children
     match('.');
 
-    match(Id);
+    parent_symbol = class_symbol;
+    class_symbol = token.symbol;
 
-    parent_name = class_name;
-    class_name = (char *)token.value;
+    match(Id);
   }
 
-  match('{');
+  compiler_StatementDefinition(compiler);
 }
 
 int compiler_Next(s_compiler *compiler) {
   if (token.type == Id) {
-    char *token_val = (char *)token.value;
-    bool isUppercase = isUppercase_String(token_val);
-    bool isFullcase = isFullcase_String(token_val);
-    bool startsUnderscore = startsUnderscore_String(token_val);
-
-    match(Id);
-
-    if (isUppercase) { // Only class
+    if (token.symbol->isUppercase) { // Only class
       compiler_ClassDefinition(compiler);
-    } else if (isFullcase) { // Constant property
+    } else if (token.symbol->isFullcase) { // Constant property
 
-    } else if (startsUnderscore) { // Private property
+    } else if (token.symbol->startsUnderscore) { // Private property
 
     } else { // Property or Method
 
@@ -296,11 +400,23 @@ int main() {
   rootScope = scope_Init(poolsize);
 
   // Init scope with keywords
-  const char *keywords = "char else enum if int return sizeof while";
-  s_parser *_parser = parse_Init(rootScope, keywords);
+  s_parser *_parser;
+  int i;
 
-  int i = Char;
-  while (i <= While) {
+  const char *keywords_types = "Char Short Int Long Float Double String Bool Unsigned";
+  _parser = parse_Init(rootScope, keywords_types);
+
+  i = Char;
+  while (i <= Unsigned) {
+    parse_Next(_parser);
+    _parser->token.symbol->token = i++;
+  }
+
+  const char *keywords = "else enum if return sizeof while for switch";
+  _parser = parse_Init(rootScope, keywords);
+
+  i = Else;
+  while (i <= Switch) {
     parse_Next(_parser);
     _parser->token.symbol->token = i++;
   }
@@ -313,8 +429,6 @@ int main() {
 
   int tok = parse_Next(parser);
   
-  printf("token: %d [%c]\n", tok, tok);
-
   compiler_Next(compiler);
 
   return 0;
