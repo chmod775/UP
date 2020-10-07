@@ -24,6 +24,92 @@ bool isFullcase_String(char *str) { return isUppercase_Char(str[0]) && isUpperca
 
 bool startsUnderscore_String(char *str) { return str[0] == '_'; }
 
+typedef struct list_item {
+  void *value;
+  struct list_item *next;
+} s_list_item;
+
+typedef struct {
+  u_int64_t items_count;
+  s_list_item *head_item;
+  s_list_item *selected_item;
+} s_list;
+
+s_list *list_create() {
+  s_list *ret = (s_list *)malloc(sizeof(s_list));
+  ret->items_count = 0;
+  ret->head_item = NULL;
+  ret->selected_item = NULL;
+  return ret;
+}
+
+void list_add(s_list *l, void *value) { // Add to the beginning
+  s_list_item *item = (s_list_item *)malloc(sizeof(s_list_item));
+  item->value = value;
+
+  s_list_item *old = l->head_item;
+  l->head_item = item;
+  item->next = old;
+
+  l->items_count++;
+}
+
+void *list_pull(s_list *l) { // Pull item from the beginning
+  if (l->head_item == NULL) return NULL;
+
+  s_list_item *item = l->head_item;
+  l->head_item = item->next;
+  void *ret = item->value;
+
+  free(item);
+
+  l->items_count--;
+  return ret;
+}
+
+void list_push(s_list *l, void *value) { // Push to the end
+  s_list_item *item = (s_list_item *)malloc(sizeof(s_list_item));
+  item->value = value;
+  item->next = NULL;
+
+  if (l->head_item == NULL)
+    l->head_item = item;
+  else {
+    s_list_item *current = l->head_item;
+    while (current->next != NULL) {
+      current = current->next;
+    }
+    current->next = item;
+  }
+
+  l->items_count++;
+}
+
+void *list_pop(s_list *l) { // Pop item from the end
+  if (l->head_item == NULL) return NULL;
+
+  void *ret = NULL;
+
+  if (l->head_item->next == NULL) { // Only one item in the list
+    ret = l->head_item->value;
+    free(l->head_item);
+    l->head_item = NULL;
+    return ret;
+  }
+
+  // Get second to last item
+  s_list_item *current = l->head_item;
+  while (current->next->next != NULL) {
+    current = current->next;
+  }
+
+  ret = current->next->value;
+  free(current->next);
+  current->next = NULL;
+
+  return ret;
+}
+
 /* ##### Symbols ##### */
 typedef struct {
   int hash;
@@ -202,8 +288,137 @@ int parse_Next(s_parser *parser) {
           }
         }
       }
+      ret(Num, token_val, NULL);
+    }
+    else if (token == '"' || token == '\'') {
+      // parse string literal, currently, the only supported escape
+      // character is '\n', store the string literal into data.
+      /*
+      last_pos = data;
+      while (*src != 0 && *src != token) {
+          token_val = *src++;
+          if (token_val == '\\') {
+              // escape character
+              token_val = *src++;
+              if (token_val == 'n') {
+                  token_val = '\n';
+              }
+          }
 
-      ret(token, token_val, NULL);
+          if (token == '"') {
+              *data++ = token_val;
+          }
+      }
+
+      src++;
+      // if it is a single character, return Num token
+      if (token == '"') {
+          token_val = (int)last_pos;
+      } else {
+          ret(Num, NULL, NULL);
+      }
+      */
+    }
+    else if (token == '/') {
+      if (*src == '/') {
+        // skip comments
+        while (*src != 0 && *src != '\n') {
+          ++src;
+        }
+      } else {
+        // divide operator
+        ret(Div, NULL, NULL);
+      }
+    }
+    else if (token == '=') {
+      // parse '==' and '='
+      if (*src == '=') {
+        src ++;
+        ret(Eq, NULL, NULL);
+      } else {
+        ret(Assign, NULL, NULL);
+      }
+    }
+    else if (token == '+') {
+      // parse '+' and '++'
+      if (*src == '+') {
+        src ++;
+        ret(Inc, NULL, NULL);
+      } else {
+        ret(Add, NULL, NULL);
+      }
+    }
+    else if (token == '-') {
+      // parse '-' and '--'
+      if (*src == '-') {
+        src ++;
+        ret(Dec, NULL, NULL);
+      } else {
+        ret(Sub, NULL, NULL);
+      }
+    }
+    else if (token == '!') {
+      // parse '!='
+      if (*src == '=') {
+        src++;
+        ret(Ne, NULL, NULL);
+      } else {
+        ret(token, NULL, NULL);
+      }
+    }
+    else if (token == '<') {
+      // parse '<=', '<<' or '<'
+      if (*src == '=') {
+        src ++;
+        ret(Le, NULL, NULL);
+      } else if (*src == '<') {
+        src ++;
+        ret(Shl, NULL, NULL);
+      } else {
+        ret(Lt, NULL, NULL);
+      }
+    }
+    else if (token == '>') {
+      // parse '>=', '>>' or '>'
+      if (*src == '=') {
+        src ++;
+        ret(Ge, NULL, NULL);
+      } else if (*src == '>') {
+        src ++;
+        ret(Shr, NULL, NULL);
+      } else {
+        ret(Gt, NULL, NULL);
+      }
+    }
+    else if (token == '|') {
+      // parse '|' or '||'
+      if (*src == '|') {
+        src ++;
+        ret(Lor, NULL, NULL);
+      } else {
+        ret(Or, NULL, NULL);
+      }
+    }
+    else if (token == '&') {
+      // parse '&' and '&&'
+      if (*src == '&') {
+        src ++;
+        ret(Lan, NULL, NULL);
+      } else {
+        ret(And, NULL, NULL);
+      }
+    }
+    else if (token == '^') {
+      ret(Xor, NULL, NULL);
+    }
+    else if (token == '%') {
+      ret(Mod, NULL, NULL);
+    }
+    else if (token == '*') {
+      ret(Mul, NULL, NULL);
+    }
+    else if (token == '?') {
+      ret(Cond, NULL, NULL);
     } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',' || token == ':' || token == '.') {
       // directly return the character as token;
       ret(token, NULL, NULL);
@@ -322,7 +537,7 @@ s_anytype *compiler_VariableType(s_compiler *compiler) {
     match('{');
 
     if (!parse_IsTokenBasicType(token)) {
-      PERROR("compiler_VariableType", "Dictionary key can only be a Basic type");
+      PERROR("compiler_VariableType", "Dictionary key can only be of basic type");
       exit(-1);
     }
 
@@ -357,6 +572,12 @@ void compiler_VariableDefinition(s_compiler *compiler, s_symbol *name) {
   match(':');
 
   s_anytype *type = compiler_VariableType(compiler);
+
+  if (token.type == Assign) {
+    compiler_Expression(compiler);
+  }
+
+  match(';');
 
   return;
 }
@@ -431,6 +652,60 @@ void compiler_Next(s_compiler *compiler) {
 #undef match
 #undef token
 
+/* ##### Expression war city ##### */
+#define token (exp->parser->token)
+#define match(A) parse_Match(exp->parser, (A))
+#define emit(A) list_push(exp->operations, (A))
+
+typedef struct {
+  s_parser *parser;
+  s_list *operations;
+} s_expression;
+
+s_expression *testExpr_Init(char *str) {
+  s_expression *ret = (s_expression *)malloc(sizeof(s_expression));
+
+  s_scope *_scope = scope_Init(512);
+  ret->parser = parse_Init(_scope, str);
+
+  ret->operations = list_create();
+
+  parse_Next(ret->parser);
+  
+  return ret;
+}
+
+s_expression *testExpr_Step(s_expression *exp, int level) {
+  // Unary operators
+  if (token.type == Num) {
+    emit(token.value);
+    match(Num);
+  } else if (token.type == '(') {
+    match('(');
+    testExpr_Step(exp, Assign);
+    match(')');
+  } else if (token.type == Inc || token.type == Dec) {
+
+  } else {
+    PERROR("testExpr_Step", "Bad expression");
+    exit(-1);
+  }
+
+  // binary operator and postfix operators.
+  while (token.type >= level) {
+    if (token.type == Add) {
+      match(Add);
+      testExpr_Step(exp, Mul);
+
+      emit(Add + 1000);
+    }
+  }
+}
+
+#undef emit
+#undef match
+#undef token
+
 /* ##### MAIN town ##### */
 s_scope *rootScope;
 
@@ -482,6 +757,13 @@ int main() {
   int tok = parse_Next(parser);
   
   compiler_Next(compiler);
+
+  // Expression tester
+  s_expression *_expression = testExpr_Init("2+(3+5)+(9+8+7)");
+
+  testExpr_Step(_expression, Assign);
+
+
 
   return 0;
 }
