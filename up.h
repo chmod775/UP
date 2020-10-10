@@ -65,9 +65,6 @@ void parlist_add(s_parlist *pl, void *value);
 
 void parlist_push(s_parlist *pl, void *value);
 
-/* ##### CORE ##### */
-
-
 /* ##### Symbols ##### */
 typedef enum {
   NOTDEFINED,
@@ -142,6 +139,11 @@ typedef struct {
 } s_anytype;
 
 typedef struct {
+  void *content;
+  s_anytype *type;
+} s_anyvalue;
+
+typedef struct {
   int key;
   s_anytype *value;
 } s_dictionarytype;
@@ -163,12 +165,16 @@ typedef enum {
   EXPRESSION
 } e_statementtype;
 
+typedef struct {
+  s_list *statements;
+} s_statementbody_statement;
+
 typedef struct _s_statement {
   struct _s_statement *parent;
   s_scope *scope;
-  s_list *statements;
   void *body;
   e_statementtype type;
+  void (*exe_cb)(struct _s_statement *);
 } s_statement;
 
 
@@ -191,17 +197,26 @@ void compile_Statement(s_compiler *compiler, s_statement *statement);
 
 /* ##### Expression ##### */
 typedef struct {
-  s_list *core_operations;
-} s_expression;
+  int token;
+  void *value;
+} s_expression_operation;
 
-s_expression *compiler_Expression(s_compiler *compiler);
-s_expression *compiler_ExpressionStep(s_compiler *compiler, s_expression *exp, int level);
+typedef struct {
+  s_list *core_operations;
+} s_statementbody_expression;
+
+void expression_Step(s_compiler *compiler, s_statement *statement, int level);
+s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
 /* ##### VARIABLE ##### */
 typedef struct {
-  s_anytype *type;
-  s_expression *init_expression;
+  s_anyvalue value;
+  s_statement *init_expression;
 } s_symbolbody_variable;
+
+typedef struct {
+  s_symbol *symbol;
+} s_statementbody_variable;
 
 s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement);
 s_statement *compile_VariableDefinition(s_symbol *name, s_compiler *compiler, s_statement *parent);
@@ -225,8 +240,30 @@ typedef struct {
 void compile_ClassDefinition(s_compiler *compiler);
 
 
+/* ##### CORE structs ##### */
+typedef struct {
+  s_anyvalue content[50];
+  int ptr;
+} __core_expression_stack;
 
+typedef struct {
+  s_anyvalue content[32];
+} __core_function_arguments;
 
+/* ##### CORE libs ##### */
+void __core_assign(s_symbol *symbol, s_anyvalue item);
+void __core_add(__core_expression_stack *stack);
+void __core_sub(__core_expression_stack *stack);
+void __core_mul(__core_expression_stack *stack);
+void __core_div(__core_expression_stack *stack);
 
+s_anyvalue __core_exe_expression(s_statement *statement);
+
+void __core_variable_def(s_statement *statement);
+void __core_call_function(s_statement *statement);
+
+void __core_exe_statement(s_statement *statement);
+
+void __core_new_class_instance();
 
 #endif

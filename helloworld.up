@@ -1,6 +1,6 @@
 // Using basic types
 m : Int;
-r : Float = 3.1415;
+r : Float = 3 + 4;
 
 m = 775;
 

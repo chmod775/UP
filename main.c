@@ -6,6 +6,7 @@
 #include "up.h"
 
 #define PERROR(A, B, ...) printf("[" A "] Error! - " B "\n", ##__VA_ARGS__);
+#define NEW(T) ((T *)malloc(sizeof(T)))
 
 /* ##### Helpers shit ##### */
 FILE *openFile(char *filename) {
@@ -584,7 +585,6 @@ s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_state
   }
 
   ret->type = type;
-  ret->statements = list_create();
   
   return ret;
 }
@@ -600,6 +600,12 @@ s_compiler *compiler_Init(char *content) {
 
   ret->rootStatement = statement_Create(ret, NULL, STATEMENT);
   if (!ret->rootStatement) { PERROR("compiler_Init", "Could not malloc root statement"); return NULL; }
+
+  s_statementbody_statement *statement_body = NEW(s_statementbody_statement);
+  if (!statement_body) { PERROR("compiler_Init", "Could not malloc statement body"); return NULL; }
+
+  statement_body->statements = list_create();
+  ret->rootStatement->body = statement_body;
 
   ret->parser = parse_Init(content);
 
@@ -632,29 +638,34 @@ void compiler_Execute(s_compiler *compiler) {
   parse_Next(compiler->rootStatement->scope, compiler->parser);
   compile_Statement(compiler, compiler->rootStatement);
   compile_Statement(compiler, compiler->rootStatement);
+
+  __core_exe_statement(compiler->rootStatement);
 }
 
+
+s_expression_operation *expression_Emit(s_list *core_operations, int token, void *value) {
+  s_expression_operation *op = NEW(s_expression_operation);
+  op->token = token;
+  op->value = value;
+  return op;
+}
 
 #define token (compiler->parser->token)
 #define match(S, A) parse_Match((S), compiler->parser, (A))
-#define emit(A) list_push(exp->core_operations, (A))
-/*
-s_expression *compiler_Expression(s_compiler *compiler) {
-  s_expression *ret = (s_expression *)malloc(sizeof(s_expression));
-  ret->core_operations = list_create();
+#define emit(O, A) list_push(O, (A))
 
-  return compiler_ExpressionStep(compiler, ret, Assign);
-}
 
-s_expression *compiler_ExpressionStep(s_compiler *compiler, s_expression *exp, int level) {
+void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
+  s_list *core_operations = ((s_statementbody_expression *)statement->body)->core_operations;
+  
   // Unary operators
   if (token.type == Num) {
-    emit(token.value);
-    match(Num);
+    expression_Emit(core_operations, token.type, token.value);
+    match(statement->scope, Num);
   } else if (token.type == '(') {
-    match('(');
-    compiler_ExpressionStep(compiler, exp, Assign);
-    match(')');
+    match(statement->scope, '(');
+    expression_Step(compiler, statement, Assign);
+    match(statement->scope, ')');
   } else if (token.type == Add) {
     // Convert string to number (Javascript like)
 
@@ -668,14 +679,27 @@ s_expression *compiler_ExpressionStep(s_compiler *compiler, s_expression *exp, i
   // binary operator and postfix operators.
   while (token.type >= level) {
     if (token.type == Add) {
-      match(Add);
-      compiler_ExpressionStep(compiler, exp, Mul);
+      match(statement->scope, Add);
+      expression_Step(compiler, statement, Mul);
 
-      emit(Add + 1000);
+      expression_Emit(core_operations, Add, &__core_add);
     }
   }
 }
-*/
+
+s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
+  s_statement *ret = statement_Create(compiler, parent, EXPRESSION);
+
+  s_statementbody_expression *statement_body = NEW(s_statementbody_expression);
+  statement_body->core_operations = list_create();
+
+  ret->body = statement_body;
+
+  expression_Step(compiler, ret, Assign);
+
+  return ret;
+}
+
 /*
 void compiler_ClassDefinition(s_compiler *compiler) {
   s_symbol *class_symbol = token.symbol;
@@ -712,7 +736,7 @@ void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
 }
 */
 
-s_anytype *compiler_GetVariableType(s_compiler *compiler, s_statement *statement) {
+s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
   s_anytype *ret = (s_anytype *)malloc(sizeof(s_anytype));
 
   ret->isDictionary = false;
@@ -728,7 +752,7 @@ s_anytype *compiler_GetVariableType(s_compiler *compiler, s_statement *statement
     match(statement->scope, '[');
 
     s_listtype *ltype = (s_listtype *)malloc(sizeof(s_listtype));
-    ltype->items = compiler_GetVariableType(compiler, statement);
+    ltype->items = compile_VariableType(compiler, statement);
 
     ret->isList = true;
     ret->type = ltype;
@@ -739,7 +763,7 @@ s_anytype *compiler_GetVariableType(s_compiler *compiler, s_statement *statement
     match(statement->scope, '{');
 
     if (!parse_IsTokenBasicType(token)) {
-      PERROR("compiler_GetVariableType", "Dictionary key can only be of basic type");
+      PERROR("compile_VariableType", "Dictionary key can only be of basic type");
       exit(-1);
     }
 
@@ -749,14 +773,14 @@ s_anytype *compiler_GetVariableType(s_compiler *compiler, s_statement *statement
 
     match(statement->scope, ',');
 
-    dtype->value = compiler_GetVariableType(compiler, statement);
+    dtype->value = compile_VariableType(compiler, statement);
 
     ret->isDictionary = true;
     ret->type = dtype;
 
     match(statement->scope, '}');
   } else {
-    PERROR("compiler_GetVariableType", "Unsupported complex variable definition");
+    PERROR("compile_VariableType", "Unsupported complex variable definition");
     exit(-1);
   }
 
@@ -766,16 +790,26 @@ s_anytype *compiler_GetVariableType(s_compiler *compiler, s_statement *statement
 s_statement *compile_VariableDefinition(s_symbol *name, s_compiler *compiler, s_statement *parent) {
   s_statement *ret = statement_Create(compiler, parent, VARIABLE_DEF);
 
+  ret->exe_cb = &__core_variable_def;
+
+  s_statementbody_variable *statement_body = NEW(s_statementbody_variable);
+  statement_body->symbol = name;
+  ret->body = statement_body;
+
   match(ret->scope, ':');
 
-  s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)malloc(sizeof(s_symbolbody_variable));
+  s_symbolbody_variable *symbol_body = NEW(s_symbolbody_variable);
   name->body = symbol_body;
+  name->type != VARIABLE;
 
-  s_anytype *type = compiler_GetVariableType(compiler, ret);
-  symbol_body->type = type;
+  s_anytype *type = compile_VariableType(compiler, ret);
+  symbol_body->value.type = type;
+  symbol_body->init_expression = NULL;
 
   if (token.type == Assign) {
-    //symbol_body->init_expression = compiler_Expression(compiler);
+    match(ret->scope, Assign);
+
+    symbol_body->init_expression = compile_Expression(compiler, ret);
   }
 
   match(ret->scope, ';');
@@ -795,6 +829,7 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
   // 8. function(...) : type { <statement> }
   // 9. class { <statement> }
   // 9. expression; (expression end with semicolon)
+  s_statementbody_statement *statement_body = (s_statementbody_statement *)statement->body;
 
   if (token.type == If) {
 
@@ -808,7 +843,13 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
 
     while (token.type != '}') {
       s_statement *sub_statement = statement_Create(compiler, statement, STATEMENT);
-      list_push(statement->statements, sub_statement);
+
+      s_statementbody_statement *sub_statement_body = NEW(s_statementbody_statement);
+      sub_statement_body->statements = list_create();
+      sub_statement->body = sub_statement_body;
+
+      sub_statement->exe_cb = &__core_exe_statement;
+      list_push(statement_body->statements, sub_statement);
       compile_Statement(compiler, sub_statement);
     }
 
@@ -832,7 +873,7 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
       if (token.type == ':') {
         // Variable definition
         s_statement *sub_statement = compile_VariableDefinition(name_symbol, compiler, statement);
-        list_push(statement->statements, sub_statement);
+        list_push(statement_body->statements, sub_statement);
       } else if (token.type == '(') {
         // Function definition
         //compiler_FunctionDefinition(compiler, name_symbol);
@@ -854,6 +895,78 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
 #undef match
 #undef token
 
+/* ##### CORE Libs ##### */
+void __core_assign(s_symbol *symbol, s_anyvalue item) {
+  if (symbol->type != VARIABLE) { PERROR("__core_assign", "Wrong symbol type"); exit(1); }
+
+  s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)symbol->body;
+
+  if (symbol_body->value.type == item.type) {
+    symbol_body->value.content = item.content;
+  } else { // Casting required
+
+  }
+}
+
+void __core_add(__core_expression_stack *stack) {
+  printf("__core_add");
+}
+void __core_sub(__core_expression_stack *stack) {}
+void __core_mul(__core_expression_stack *stack) {}
+void __core_div(__core_expression_stack *stack) {}
+
+s_anyvalue __core_exe_expression(s_statement *statement) {
+  __core_expression_stack stack;
+  stack.ptr = 0;
+
+  s_statementbody_expression *statement_body = (s_statementbody_expression *)statement->body;
+  s_list *core_operations = statement_body->core_operations;
+
+  s_expression_operation *op = list_read_first(core_operations);
+
+  do {
+    if (op->token == Num) {
+      stack.content[stack.ptr].content = op->value;
+    } else {
+      void (*cb)(__core_expression_stack *stack) = op->value;
+      cb(&stack);
+    }
+    op = list_read_next(core_operations);
+  } while (op != NULL);
+}
+
+void __core_variable_def(s_statement *statement) {
+  if (statement->type != VARIABLE_DEF) { PERROR("__core_variable_def", "Wrong statement type"); exit(1); }
+
+  s_statementbody_variable *statement_body = (s_statementbody_variable *)statement->body;
+  s_symbol *symbol = statement_body->symbol;
+  s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)symbol->body;
+
+  if (symbol_body->init_expression != NULL) {
+    s_anyvalue exp_result = __core_exe_expression(symbol_body->init_expression);
+    __core_assign(symbol, exp_result);
+  }
+}
+
+void __core_call_function(s_statement *statement) {}
+
+void __core_exe_statement(s_statement *statement) {
+  if (statement->type == STATEMENT) {
+    s_statementbody_statement *statement_body = (s_statementbody_statement *)statement->body;
+
+    s_statement *sub_statement = list_read_first(statement_body->statements);
+    do {
+      __core_exe_statement(sub_statement);
+      sub_statement = list_read_next(statement_body->statements);
+    } while (sub_statement != NULL);
+  } else {
+    if (statement->exe_cb)
+      statement->exe_cb(statement);
+  }
+}
+
+void __core_new_class_instance() {}
+
 
 /* ##### MAIN town ##### */
 s_scope *rootScope;
@@ -866,7 +979,7 @@ int main() {
 " |    |  / |    |     \n"
 " |______/  |____|     \n"
 "                      \n"
-" UP Interpreter  v0.1 \n";
+" UP Interpreter  v0.2 \n";
   printf(intro);
 
   char *srcFilename = "helloworld.up";
