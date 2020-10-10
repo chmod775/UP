@@ -1,34 +1,23 @@
-Actuator {
-	name : {String,Float};
-	value : Int;
-}
+// Using basic types
+m : Int;
+r : Float = 3.1415;
 
-// Customized class, same as a children
-Motor : Actuator {
-	
-}
+m = 775;
 
-// Children of Actuator
-Actuator.Motor {
-	// Public
-	direction : Bool;
-	phases : [String] = ['L1', 'L2', 'L3']; // Array
-	currents: {String,Real} = { 'L1' = 0.0, 'L2' = 0.0 }; // Dictionary { KEY, VALUE }
+print(m);
+print(r);
 
-	// Constant
-	MAX_PHASES : Int = 3;
 
-	// Method
-	getDirection(a : String, b : Int, c : Actuator) : Int {
+// Using global types classes (String and Number)
+a : String = "Hello";
+b : String = "World!";
+pi : Number : 3.1415;
 
-	}
+print(pi);
+print(a + " " + b);
+print("Value of $1 is: $2", a, pi);
+print('Value of {a} is: {pi}');
 
-	// Private
-	_temp : Int;
-}
-
-m1 : Actuator.Motor;
-p1 : Actuator.Motor.Pump;
-cnt : Int;
-
-cnt++;
+c : String;
+c = '{a} {b} {pi}';
+print(c);

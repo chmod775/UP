@@ -1,0 +1,34 @@
+Actuator {
+	name : {String,Float};
+	value : Int;
+}
+
+// Customized class, same as a children
+Motor : Actuator {
+	
+}
+
+// Children of Actuator
+Actuator.Motor {
+	// Public
+	direction : Bool;
+	phases : [String] = ['L1', 'L2', 'L3']; // Array
+	currents: {String,Real} = { 'L1' = 0.0, 'L2' = 0.0 }; // Dictionary { KEY, VALUE }
+
+	// Constant
+	MAX_PHASES : Int = 3;
+
+	// Method
+	getDirection(a : String, b : Int, c : Actuator) : Int {
+
+	}
+
+	// Private
+	_temp : Int;
+}
+
+m1 : Actuator.Motor;
+p1 : Actuator.Motor.Pump;
+cnt : Int;
+
+cnt++;

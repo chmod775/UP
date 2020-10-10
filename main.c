@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "up.h"
+
 #define PERROR(A, B, ...) printf("[" A "] Error! - " B "\n", ##__VA_ARGS__);
 
 /* ##### Helpers shit ##### */
@@ -24,23 +26,76 @@ bool isFullcase_String(char *str) { return isUppercase_Char(str[0]) && isUpperca
 
 bool startsUnderscore_String(char *str) { return str[0] == '_'; }
 
-typedef struct list_item {
-  void *value;
-  struct list_item *next;
-} s_list_item;
-
-typedef struct {
-  u_int64_t items_count;
-  s_list_item *head_item;
-  s_list_item *selected_item;
-} s_list;
-
 s_list *list_create() {
   s_list *ret = (s_list *)malloc(sizeof(s_list));
   ret->items_count = 0;
   ret->head_item = NULL;
   ret->selected_item = NULL;
   return ret;
+}
+
+void *list_read_index(s_list *l, u_int64_t index) {
+  if (l->head_item == NULL) return NULL;
+
+  u_int64_t cnt = 0;
+
+  s_list_item *current = l->head_item;
+  while (cnt < index) {
+    if (current->next == NULL) return NULL;
+    current = current->next;
+    cnt++;
+  }
+
+  l->selected_item = current;
+
+  return l->selected_item->value;
+}
+
+void *list_read_first(s_list *l) {
+  if (l->head_item == NULL) return NULL;
+
+  l->selected_item = l->head_item;
+  return l->selected_item->value;
+}
+
+void *list_read_last(s_list *l) {
+  if (l->head_item == NULL) return NULL;
+
+  l->selected_item = l->head_item;
+
+  if (l->selected_item->next == NULL) { // Only one item in the list
+    return l->selected_item->value;
+  }
+
+  // Get last item
+  while (l->selected_item->next != NULL) {
+    l->selected_item = l->selected_item->next;
+  }
+
+  return l->selected_item->value;
+}
+
+void *list_read_next(s_list *l) {
+  if (l->head_item == NULL) return NULL;
+  if (l->selected_item == NULL) return NULL;
+  if (l->selected_item->next == NULL) return NULL;
+
+  l->selected_item = l->selected_item->next;
+
+  return l->selected_item->value;
+}
+void *list_read_previous(s_list *l) {
+  if (l->head_item == NULL) return NULL;
+  if (l->selected_item == NULL) return NULL;
+
+  s_list_item *current = l->head_item;
+  while (current->next != l->selected_item) {
+    current = current->next;
+  }
+
+  l->selected_item = current;
+
+  return l->selected_item->value;
 }
 
 void list_add(s_list *l, void *value) { // Add to the beginning
@@ -111,20 +166,6 @@ void *list_pop(s_list *l) { // Pop item from the end
 }
 
 /* ##### Symbols ##### */
-typedef struct {
-  int hash;
-  char *name;
-  int length;
-
-  int type;
-  int token;
-  void *value;
-
-  bool isUppercase;
-  bool isFullcase;
-  bool startsUnderscore;
-} s_symbol;
-
 char *symbol_GetCleanName(s_symbol *symbol) {
   char *ret = (char *)malloc(sizeof(char) * (symbol->length + 1));
   memcpy(ret, symbol->name, symbol->length);
@@ -133,42 +174,17 @@ char *symbol_GetCleanName(s_symbol *symbol) {
 }
 
 /* ##### Scope ##### */
-typedef struct {
-  s_symbol *symbols;
-} s_scope;
-
 s_scope *scope_Init(int sizeLimit) {
   s_scope *ret = (s_scope *)malloc(sizeof(s_scope));
   if (!ret) { PERROR("scope_Init", "Could not malloc scope"); return NULL; }
 
-  ret->symbols = (s_symbol *)malloc(sizeof(s_symbol) * sizeLimit);
-  if (!ret->symbols) { PERROR("scope_Init", "Could not malloc symbols table"); return NULL; }
+  ret->symbols = list_create();
+  if (!ret->symbols) { PERROR("scope_Init", "Could not create symbols list"); return NULL; }
 
   return ret;
 }
 
 /* ##### Parser ##### */
-typedef struct {
-  int type;
-  int64_t value;
-  s_symbol *symbol;
-} s_token;
-
-typedef struct {
-  s_scope *scope;
-  char *source;
-  char *ptr;
-  int line;
-  s_token token;
-} s_parser;
-
-typedef enum {
-  Num = 128, Fun, Sys, Glo, Loc, Id, Class, Var,
-  Char, Short, Int, Long, Float, Double, String, Bool, Unsigned,
-  Else, Enum, If, Return, Sizeof, While, For, Switch,
-  Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
-} e_token;
-
 s_parser *parse_Init(s_scope *scope, char *str) {
   s_parser *ret = (s_parser *)malloc(sizeof(s_parser));
   if (!ret) { PERROR("parse_Init", "Could not malloc parser"); return NULL; }
@@ -241,28 +257,33 @@ int parse_Next(s_parser *parser) {
       }
 
       // Search for define symbol
-      s_symbol *symbol_ptr = parser->scope->symbols;
-      while (symbol_ptr->token) {
+      s_symbol *symbol_ptr = (s_symbol *)list_read_first(parser->scope->symbols);
+
+      while ((symbol_ptr != NULL) && symbol_ptr->token) {
         if (symbol_ptr->hash) {
           if (!memcmp(symbol_ptr->name, last_pos, src - last_pos)) {
             // Found symbol, return it
             ret(symbol_ptr->token, last_pos, symbol_ptr);
           }
         }
-        symbol_ptr++;
+        symbol_ptr = (s_symbol *)list_read_next(parser->scope->symbols);
       }
 
       // No symbol found, create one
-      symbol_ptr->hash = hash;
-      symbol_ptr->name = last_pos;
-      symbol_ptr->length = src - last_pos;
-      symbol_ptr->token = Id;
+      s_symbol *new_symbol = (s_symbol *)malloc(sizeof(s_symbol));
+
+      new_symbol->hash = hash;
+      new_symbol->name = last_pos;
+      new_symbol->length = src - last_pos;
+      new_symbol->token = Id;
       
-      symbol_ptr->isUppercase = isUppercase_String(last_pos);
-      symbol_ptr->isFullcase = isFullcase_String(last_pos);
-      symbol_ptr->startsUnderscore = startsUnderscore_String(last_pos);
+      new_symbol->isUppercase = isUppercase_String(last_pos);
+      new_symbol->isFullcase = isFullcase_String(last_pos);
+      new_symbol->startsUnderscore = startsUnderscore_String(last_pos);
       
-      ret(Id, last_pos, symbol_ptr);
+      list_push(parser->scope->symbols, new_symbol);
+
+      ret(Id, last_pos, new_symbol);
     }
     else if (token >= '0' && token <= '9') {
       // parse number, three kinds: dec(123) hex(0x123) oct(017)
@@ -436,38 +457,14 @@ int parse_Match(s_parser *parser, int token) {
     parse_Next(parser);
   } else {
     if (token < Num)
-      printf("%d: expected token: %c\n", parser->line, token);
+      printf("Line %d: expected token: %c\n", parser->line, token);
     else
-      printf("%d: expected token: %d\n", parser->line, token);
+      printf("Line %d: expected token: %d\n", parser->line, token);
     exit(-1);
   }
 }
 
-/* ##### Types ##### */
-typedef struct {
-  bool isDictionary;
-  bool isList;
-  void *type;
-} s_anytype;
-
-typedef struct {
-  int key;
-  s_anytype *value;
-} s_dictionarytype;
-
-typedef struct {
-  s_anytype *items;
-} s_listtype;
-
-/* ##### Expression ##### /*
-
 /* ##### Compiler ##### */
-typedef struct {
-  s_parser *parser;
-  void *text;
-  void *data;
-} s_compiler;
-
 s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
   s_compiler *ret = (s_compiler *)malloc(sizeof(s_compiler));
   if (!ret) { PERROR("compiler_Init", "Could not malloc compiler"); return NULL; }
@@ -480,9 +477,48 @@ s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
 #define token (compiler->parser->token)
 #define match(A) parse_Match(compiler->parser, (A))
 
-void compiler_Expression(s_compiler *compiler) {
 
+
+#define emit(A) list_push(exp->core_operations, (A))
+
+s_expression *compiler_Expression(s_compiler *compiler) {
+  s_expression *ret = (s_expression *)malloc(sizeof(s_expression));
+  ret->core_operations = list_create();
+
+  return compiler_ExpressionStep(compiler, ret, Assign);
 }
+
+s_expression *compiler_ExpressionStep(s_compiler *compiler, s_expression *exp, int level) {
+  // Unary operators
+  if (token.type == Num) {
+    emit(token.value);
+    match(Num);
+  } else if (token.type == '(') {
+    match('(');
+    compiler_ExpressionStep(compiler, exp, Assign);
+    match(')');
+  } else if (token.type == Add) {
+    // Convert string to number (Javascript like)
+
+  } else if (token.type == Inc || token.type == Dec) {
+
+  } else {
+    PERROR("testExpr_Step", "Bad expression");
+    exit(-1);
+  }
+
+  // binary operator and postfix operators.
+  while (token.type >= level) {
+    if (token.type == Add) {
+      match(Add);
+      compiler_ExpressionStep(compiler, exp, Mul);
+
+      emit(Add + 1000);
+    }
+  }
+}
+
+#undef emit
 
 void compiler_ClassDefinition(s_compiler *compiler) {
   s_symbol *class_symbol = token.symbol;
@@ -571,10 +607,14 @@ void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
 void compiler_VariableDefinition(s_compiler *compiler, s_symbol *name) {
   match(':');
 
+  s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)malloc(sizeof(s_symbolbody_variable));
+  name->body = symbol_body;
+
   s_anytype *type = compiler_VariableType(compiler);
+  symbol_body->type = type;
 
   if (token.type == Assign) {
-    compiler_Expression(compiler);
+    symbol_body->init_expression = compiler_Expression(compiler);
   }
 
   match(';');
@@ -590,7 +630,7 @@ void compiler_Statement(s_compiler *compiler) {
   // 4. { <statement> }
   // 5. return xxx;
   // 6. <empty statement>;
-  // 7. variable : type [ = initialization];
+  // 7. variable : type [ = expression];
   // 8. function(...) : type { statement }
   // 9. expression; (expression end with semicolon)
 
@@ -652,59 +692,6 @@ void compiler_Next(s_compiler *compiler) {
 #undef match
 #undef token
 
-/* ##### Expression war city ##### */
-#define token (exp->parser->token)
-#define match(A) parse_Match(exp->parser, (A))
-#define emit(A) list_push(exp->operations, (A))
-
-typedef struct {
-  s_parser *parser;
-  s_list *operations;
-} s_expression;
-
-s_expression *testExpr_Init(char *str) {
-  s_expression *ret = (s_expression *)malloc(sizeof(s_expression));
-
-  s_scope *_scope = scope_Init(512);
-  ret->parser = parse_Init(_scope, str);
-
-  ret->operations = list_create();
-
-  parse_Next(ret->parser);
-  
-  return ret;
-}
-
-s_expression *testExpr_Step(s_expression *exp, int level) {
-  // Unary operators
-  if (token.type == Num) {
-    emit(token.value);
-    match(Num);
-  } else if (token.type == '(') {
-    match('(');
-    testExpr_Step(exp, Assign);
-    match(')');
-  } else if (token.type == Inc || token.type == Dec) {
-
-  } else {
-    PERROR("testExpr_Step", "Bad expression");
-    exit(-1);
-  }
-
-  // binary operator and postfix operators.
-  while (token.type >= level) {
-    if (token.type == Add) {
-      match(Add);
-      testExpr_Step(exp, Mul);
-
-      emit(Add + 1000);
-    }
-  }
-}
-
-#undef emit
-#undef match
-#undef token
 
 /* ##### MAIN town ##### */
 s_scope *rootScope;
@@ -757,13 +744,6 @@ int main() {
   int tok = parse_Next(parser);
   
   compiler_Next(compiler);
-
-  // Expression tester
-  s_expression *_expression = testExpr_Init("2+(3+5)+(9+8+7)");
-
-  testExpr_Step(_expression, Assign);
-
-
 
   return 0;
 }
