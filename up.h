@@ -1,3 +1,8 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+
 #ifndef UP
 #define UP
 
@@ -8,6 +13,8 @@ FILE *openFile(char *filename);
 
 void closeFile(FILE *fd);
 
+int hashOfString(char *str);
+
 bool isUppercase_Char(char ch);
 bool isUppercase_String(char *str);
 
@@ -15,9 +22,10 @@ bool isFullcase_String(char *str);
 
 bool startsUnderscore_String(char *str);
 
-typedef struct list_item {
+/* ##### LINKED LIST ##### */
+typedef struct _s_list_item {
   void *value;
-  struct list_item *next;
+  struct _s_list_item *next;
 } s_list_item;
 
 typedef struct {
@@ -35,12 +43,27 @@ void *list_read_next(s_list *l);
 void *list_read_previous(s_list *l);
 
 void list_add(s_list *l, void *value);
-
 void *list_pull(s_list *l);
 
 void list_push(s_list *l, void *value);
-
 void *list_pop(s_list *l);
+
+/* ##### PARENTABLE LINKED LIST ##### */
+typedef struct {
+  s_list *lists;
+  s_list *selected_list;
+} s_parlist;
+
+s_parlist *parlist_create(s_parlist *parent);
+
+void *parlist_read_first(s_parlist *pl);
+void *parlist_read_last(s_parlist *pl);
+void *parlist_read_next(s_parlist *pl);
+void *parlist_read_previous(s_parlist *pl);
+
+void parlist_add(s_parlist *pl, void *value);
+
+void parlist_push(s_parlist *pl, void *value);
 
 /* ##### CORE ##### */
 
@@ -69,13 +92,17 @@ typedef struct {
 } s_symbol;
 
 char *symbol_GetCleanName(s_symbol *symbol);
+s_symbol *symbol_CreateFromKeyword(char *keyword, int token);
 
 /* ##### Scope ##### */
-typedef struct {
-  s_list *symbols;
+typedef struct _s_scope {
+  struct _s_scope *parent;
+  s_parlist *symbols;
 } s_scope;
 
-s_scope *scope_Init(int sizeLimit);
+s_scope *scope_Create(s_scope *parent);
+s_scope *scope_CreateAsRoot();
+
 
 /* ##### Parser ##### */
 typedef struct {
@@ -85,7 +112,6 @@ typedef struct {
 } s_token;
 
 typedef struct {
-  s_scope *scope;
   char *source;
   char *ptr;
   int line;
@@ -99,15 +125,14 @@ typedef enum {
   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
 } e_token;
 
-s_parser *parse_Init(s_scope *scope, char *str);
+s_parser *parse_Init(char *str);
 
 bool parse_IsTokenBasicType(s_token token);
 
-s_parser *parse_InitFromFile(s_scope *scope, char *filename, int sizeLimit);
+int parse_Next(s_scope *scope, s_parser *parser);
 
-int parse_Next(s_parser *parser);
+int parse_Match(s_scope *scope, s_parser *parser, int token);
 
-int parse_Match(s_parser *parser, int token);
 
 /* ##### Types ##### */
 typedef struct {
@@ -125,15 +150,44 @@ typedef struct {
   s_anytype *items;
 } s_listtype;
 
+/* ##### STATEMENT ##### */
+typedef enum {
+  IF,
+  FOR,
+  WHILE,
+  STATEMENT,
+  RETURN,
+  VARIABLE_DEF,
+  FUNCTION_DEF,
+  CLASS_DEF,
+  EXPRESSION
+} e_statementtype;
+
+typedef struct _s_statement {
+  struct _s_statement *parent;
+  s_scope *scope;
+  s_list *statements;
+  void *body;
+  e_statementtype type;
+} s_statement;
+
 
 /* ##### Compiler ##### */
 typedef struct {
+  s_scope *rootScope;
   s_parser *parser;
-  s_list *statements;
+  s_statement *rootStatement;
 } s_compiler;
 
-s_compiler *compiler_Init(s_parser *parser, int sizeLimit);
+s_compiler *compiler_Init(char *content);
 void compiler_Next(s_compiler *compiler);
+
+
+/* ##### STATEMENT ##### */
+s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_statementtype type);
+s_statement *statement_CreateAsRoot(s_compiler *compiler);
+
+void compile_Statement(s_compiler *compiler, s_statement *statement);
 
 /* ##### Expression ##### */
 typedef struct {
@@ -149,8 +203,8 @@ typedef struct {
   s_expression *init_expression;
 } s_symbolbody_variable;
 
-s_anytype *compiler_VariableType(s_compiler *compiler);
-void compiler_VariableDefinition(s_compiler *compiler, s_symbol *name);
+s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement);
+s_statement *compile_VariableDefinition(s_symbol *name, s_compiler *compiler, s_statement *parent);
 
 /* ##### FUNCTION ##### */
 typedef struct {
@@ -162,21 +216,17 @@ typedef struct {
   s_list *arguments;
 } s_symbolbody_function;
 
-void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name);
+void compile_FunctionDefinition(s_compiler *compiler, s_symbol *name);
 
 /* ##### CLASS ##### */
 typedef struct {
   void *TODO;
 } s_symbolbody_class;
-void compiler_ClassDefinition(s_compiler *compiler);
+void compile_ClassDefinition(s_compiler *compiler);
 
 
-/* ##### STATEMENT ##### */
-typedef struct {
 
-} s_statement;
 
-void compiler_Statement(s_compiler *compiler);
 
 
 #endif

@@ -7,6 +7,12 @@ m = 775;
 print(m);
 print(r);
 
+s1:Int = 1;
+s2:Int = 2;
+s3:Int = s1 + s2;
+
+print(s3);
+
 
 // Using global types classes (String and Number)
 a : String = "Hello";

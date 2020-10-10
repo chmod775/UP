@@ -19,6 +19,20 @@ void closeFile(FILE *fd) {
     PERROR("closeFile", "could not close file");
 }
 
+int hashOfSymbol(char *str) {
+  if (str == NULL) return 0;
+  int hash = *str;
+
+  str++;
+
+  while ((*str >= 'a' && *str <= 'z') || (*str >= 'A' && *str <= 'Z') || (*str >= '0' && *str <= '9') || (*str == '_')) {
+    hash = hash * 147 + *str;
+    str++;
+  }
+
+  return hash;
+}
+
 bool isUppercase_Char(char ch) { return (ch >= 'A' && ch <= 'Z'); }
 bool isUppercase_String(char *str) { return isUppercase_Char(str[0]); }
 
@@ -26,8 +40,11 @@ bool isFullcase_String(char *str) { return isUppercase_Char(str[0]) && isUpperca
 
 bool startsUnderscore_String(char *str) { return str[0] == '_'; }
 
+/* ##### LINKED LIST ##### */
 s_list *list_create() {
   s_list *ret = (s_list *)malloc(sizeof(s_list));
+  if (!ret) { PERROR("list_create", "Could not malloc list"); return NULL; }
+
   ret->items_count = 0;
   ret->head_item = NULL;
   ret->selected_item = NULL;
@@ -57,7 +74,6 @@ void *list_read_first(s_list *l) {
   l->selected_item = l->head_item;
   return l->selected_item->value;
 }
-
 void *list_read_last(s_list *l) {
   if (l->head_item == NULL) return NULL;
 
@@ -108,7 +124,6 @@ void list_add(s_list *l, void *value) { // Add to the beginning
 
   l->items_count++;
 }
-
 void *list_pull(s_list *l) { // Pull item from the beginning
   if (l->head_item == NULL) return NULL;
 
@@ -139,7 +154,6 @@ void list_push(s_list *l, void *value) { // Push to the end
 
   l->items_count++;
 }
-
 void *list_pop(s_list *l) { // Pop item from the end
   if (l->head_item == NULL) return NULL;
 
@@ -165,6 +179,77 @@ void *list_pop(s_list *l) { // Pop item from the end
   return ret;
 }
 
+/* ##### PARENTABLE LINKED LIST ##### */
+s_parlist *parlist_create(s_parlist *parent) {
+  s_parlist *ret = (s_parlist *)malloc(sizeof(s_parlist));
+  if (!ret) { PERROR("parlist_create", "Could not malloc parlist"); return NULL; }
+
+  ret->lists = list_create();
+
+  if (parent != NULL) {
+    s_list *l = (s_list *)list_read_first(parent->lists);
+
+    while (l != NULL) {
+      list_push(ret->lists, l);
+      l = list_read_next(parent->lists);
+    }
+  }
+
+  s_list *emptyList = list_create();
+  list_push(ret->lists, emptyList);
+
+  ret->selected_list = emptyList;
+
+  return ret;
+}
+
+void *parlist_read_first(s_parlist *pl) {
+  s_list *l = list_read_first(pl->lists);
+  pl->selected_list = l;
+  return list_read_first(l);
+}
+void *parlist_read_last(s_parlist *pl) {
+  s_list *l = list_read_last(pl->lists);
+  pl->selected_list = l;
+  return list_read_last(l);
+}
+void *parlist_read_next(s_parlist *pl) {
+  void *ret = list_read_next(pl->selected_list);
+
+  if (ret == NULL) {
+    s_list *l = list_read_next(pl->lists);
+    if (l == NULL) return NULL;
+
+    pl->selected_list = l;
+    ret = list_read_first(l);
+  }
+
+  return ret;
+}
+void *parlist_read_previous(s_parlist *pl) {
+  void *ret = list_read_previous(pl->selected_list);
+
+  if (ret == NULL) {
+    s_list *l = list_read_previous(pl->lists);
+    if (l == NULL) return NULL;
+
+    pl->selected_list = l;
+    ret = list_read_last(l);
+  }
+
+  return ret;
+}
+
+void parlist_add(s_parlist *pl, void *value) {
+  s_list *l = list_read_first(pl->lists);
+  list_add(l, value);
+}
+
+void parlist_push(s_parlist *pl, void *value) {
+  s_list *l = list_read_last(pl->lists);
+  list_push(l, value);
+}
+
 /* ##### Symbols ##### */
 char *symbol_GetCleanName(s_symbol *symbol) {
   char *ret = (char *)malloc(sizeof(char) * (symbol->length + 1));
@@ -173,23 +258,67 @@ char *symbol_GetCleanName(s_symbol *symbol) {
   return ret;
 }
 
+s_symbol *symbol_CreateFromKeyword(char *keyword, int token) {
+  s_symbol *ret = (s_symbol *)malloc(sizeof(s_symbol));
+  if (!ret) { PERROR("symbol_CreateFromKeyword", "Could not malloc symbol"); return NULL; }
+
+  ret->hash = hashOfSymbol(keyword);
+  ret->name = keyword;
+  ret->length = strlen(keyword);
+  ret->token = token;
+  
+  ret->isUppercase = isUppercase_String(keyword);
+  ret->isFullcase = isFullcase_String(keyword);
+  ret->startsUnderscore = startsUnderscore_String(keyword);
+
+  return ret;
+}
+
 /* ##### Scope ##### */
-s_scope *scope_Init(int sizeLimit) {
+s_scope *scope_Create(s_scope *parent) {
   s_scope *ret = (s_scope *)malloc(sizeof(s_scope));
   if (!ret) { PERROR("scope_Init", "Could not malloc scope"); return NULL; }
 
-  ret->symbols = list_create();
+  ret->parent = parent;
+
+  ret->symbols = parlist_create(parent == NULL ? NULL : parent->symbols);
   if (!ret->symbols) { PERROR("scope_Init", "Could not create symbols list"); return NULL; }
 
   return ret;
 }
 
+s_scope *scope_CreateAsRoot() {
+  s_scope *ret = scope_Create(NULL);
+
+  // Init symbols with base types
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Char", Char));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Short", Short));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Int", Int));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Long", Long));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Float", Float));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Double", Double));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("String", String));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Bool", Bool));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("Unsigned", Unsigned));
+
+  // Init symbols with base keywords
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("else", Else));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("enum", Enum));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("if", If));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("return", Return));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("sizeof", Sizeof));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("while", While));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("for", For));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("switch", Switch));
+
+  return ret;
+}
+
 /* ##### Parser ##### */
-s_parser *parse_Init(s_scope *scope, char *str) {
+s_parser *parse_Init(char *str) {
   s_parser *ret = (s_parser *)malloc(sizeof(s_parser));
   if (!ret) { PERROR("parse_Init", "Could not malloc parser"); return NULL; }
 
-  ret->scope = scope;
   ret->line = 1;
   ret->ptr = ret->source = str;
   if (!ret->source) { PERROR("parse_Init", "Src is null"); return NULL; }
@@ -201,30 +330,7 @@ bool parse_IsTokenBasicType(s_token token) {
   return (token.type >= Char) && (token.type <= Unsigned);
 }
 
-s_parser *parse_InitFromFile(s_scope *scope, char *filename, int sizeLimit) {
-  // Open source file
-  FILE *fd = openFile(filename);
-  if (!fd) { PERROR("parse_InitFromFile", "Error opening file"); return NULL; }
-
-  // Malloc source code area
-  char *content = (char *)malloc(sizeLimit * sizeof(char));
-  if (!content) { PERROR("parse_InitFromFile", "Could not malloc source code area"); return NULL; }
-
-  // Read the source file
-  int l;
-  if ((l = fread(content, 1, sizeLimit-1, fd)) <= 0) { PERROR("parse_InitFromFile", "fread() returned %d", l); return NULL; }
-  content[l] = 0; // add EOF character
-
-  // Close file
-  closeFile(fd);
-
-  // Create parser with source code
-  s_parser *ret = parse_Init(scope, content);
-
-  return ret;
-}
-
-int parse_Next(s_parser *parser) {
+int parse_Next(s_scope *scope, s_parser *parser) {
   #define src parser->ptr
   #define ret(TOKEN, VALUE, SYMBOL) { parser->token.symbol = (SYMBOL); parser->token.value = (VALUE); parser->token.type = (TOKEN); return (TOKEN); }
 
@@ -257,16 +363,16 @@ int parse_Next(s_parser *parser) {
       }
 
       // Search for define symbol
-      s_symbol *symbol_ptr = (s_symbol *)list_read_first(parser->scope->symbols);
+      s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
 
       while ((symbol_ptr != NULL) && symbol_ptr->token) {
         if (symbol_ptr->hash) {
-          if (!memcmp(symbol_ptr->name, last_pos, src - last_pos)) {
+          if (!memcmp(symbol_ptr->name, last_pos, symbol_ptr->length)) {
             // Found symbol, return it
             ret(symbol_ptr->token, last_pos, symbol_ptr);
           }
         }
-        symbol_ptr = (s_symbol *)list_read_next(parser->scope->symbols);
+        symbol_ptr = (s_symbol *)parlist_read_next(scope->symbols);
       }
 
       // No symbol found, create one
@@ -281,7 +387,7 @@ int parse_Next(s_parser *parser) {
       new_symbol->isFullcase = isFullcase_String(last_pos);
       new_symbol->startsUnderscore = startsUnderscore_String(last_pos);
       
-      list_push(parser->scope->symbols, new_symbol);
+      parlist_push(scope->symbols, new_symbol);
 
       ret(Id, last_pos, new_symbol);
     }
@@ -452,9 +558,9 @@ int parse_Next(s_parser *parser) {
   #undef src
 }
 
-int parse_Match(s_parser *parser, int token) {
+int parse_Match(s_scope *scope, s_parser *parser, int token) {
   if (parser->token.type == token) {
-    parse_Next(parser);
+    parse_Next(scope, parser);
   } else {
     if (token < Num)
       printf("Line %d: expected token: %c\n", parser->line, token);
@@ -464,23 +570,75 @@ int parse_Match(s_parser *parser, int token) {
   }
 }
 
+/* ##### STATEMENT ##### */
+s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_statementtype type) {
+  s_statement *ret = (s_statement *)malloc(sizeof(s_statement));
+  if (!ret) { PERROR("statement_Create", "Could not malloc statement"); return NULL; }
+
+  if (parent == NULL) { // Root statement
+    ret->parent = NULL;
+    ret->scope = compiler->rootScope;
+  } else {
+    ret->parent = parent;
+    ret->scope = scope_Create(parent->scope);
+  }
+
+  ret->type = type;
+  ret->statements = list_create();
+  
+  return ret;
+}
+
+
 /* ##### Compiler ##### */
-s_compiler *compiler_Init(s_parser *parser, int sizeLimit) {
+s_compiler *compiler_Init(char *content) {
   s_compiler *ret = (s_compiler *)malloc(sizeof(s_compiler));
   if (!ret) { PERROR("compiler_Init", "Could not malloc compiler"); return NULL; }
 
-  ret->parser = parser;
+  ret->rootScope = scope_CreateAsRoot();
+  if (!ret->rootScope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
+
+  ret->rootStatement = statement_Create(ret, NULL, STATEMENT);
+  if (!ret->rootStatement) { PERROR("compiler_Init", "Could not malloc root statement"); return NULL; }
+
+  ret->parser = parse_Init(content);
 
   return ret;
 }
 
+s_compiler *compiler_InitFromFile(char *filename) {
+  const int sizeLimit = 256 * 1024; // arbitrary size
+
+  // Open source file
+  FILE *fd = openFile(filename);
+  if (!fd) { PERROR("compiler_InitFromFile", "Error opening file"); return NULL; }
+
+  // Malloc source code area
+  char *content = (char *)malloc(sizeLimit * sizeof(char));
+  if (!content) { PERROR("compiler_InitFromFile", "Could not malloc source code area"); return NULL; }
+
+  // Read the source file
+  int l;
+  if ((l = fread(content, 1, sizeLimit-1, fd)) <= 0) { PERROR("compiler_InitFromFile", "fread() returned %d", l); return NULL; }
+  content[l] = 0; // add EOF character
+
+  // Close file
+  closeFile(fd);
+
+  return compiler_Init(content);
+}
+
+void compiler_Execute(s_compiler *compiler) {
+  parse_Next(compiler->rootStatement->scope, compiler->parser);
+  compile_Statement(compiler, compiler->rootStatement);
+  compile_Statement(compiler, compiler->rootStatement);
+}
+
+
 #define token (compiler->parser->token)
-#define match(A) parse_Match(compiler->parser, (A))
-
-
-
+#define match(S, A) parse_Match((S), compiler->parser, (A))
 #define emit(A) list_push(exp->core_operations, (A))
-
+/*
 s_expression *compiler_Expression(s_compiler *compiler) {
   s_expression *ret = (s_expression *)malloc(sizeof(s_expression));
   ret->core_operations = list_create();
@@ -517,9 +675,8 @@ s_expression *compiler_ExpressionStep(s_compiler *compiler, s_expression *exp, i
     }
   }
 }
-
-#undef emit
-
+*/
+/*
 void compiler_ClassDefinition(s_compiler *compiler) {
   s_symbol *class_symbol = token.symbol;
   s_symbol *parent_symbol = NULL;
@@ -545,8 +702,17 @@ void compiler_ClassDefinition(s_compiler *compiler) {
 
   compiler_Statement(compiler);
 }
+*/
+/*
+void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
+  match('(');
 
-s_anytype *compiler_VariableType(s_compiler *compiler) {
+
+
+}
+*/
+
+s_anytype *compiler_GetVariableType(s_compiler *compiler, s_statement *statement) {
   s_anytype *ret = (s_anytype *)malloc(sizeof(s_anytype));
 
   ret->isDictionary = false;
@@ -556,73 +722,68 @@ s_anytype *compiler_VariableType(s_compiler *compiler) {
   if (parse_IsTokenBasicType(token)) {
     // Basic type
     ret->type = token.type;
-    match(token.type);
+    match(statement->scope, token.type);
   } else if (token.type == '[') {
     // List
-    match('[');
+    match(statement->scope, '[');
 
     s_listtype *ltype = (s_listtype *)malloc(sizeof(s_listtype));
-    ltype->items = compiler_VariableType(compiler);
+    ltype->items = compiler_GetVariableType(compiler, statement);
 
     ret->isList = true;
     ret->type = ltype;
 
-    match(']');
+    match(statement->scope, ']');
   } else if (token.type == '{') {
     // Dictionary
-    match('{');
+    match(statement->scope, '{');
 
     if (!parse_IsTokenBasicType(token)) {
-      PERROR("compiler_VariableType", "Dictionary key can only be of basic type");
+      PERROR("compiler_GetVariableType", "Dictionary key can only be of basic type");
       exit(-1);
     }
 
     s_dictionarytype *dtype = (s_dictionarytype *)malloc(sizeof(s_dictionarytype));
     dtype->key = token.type;
-    match(token.type);
+    match(statement->scope, token.type);
 
-    match(',');
+    match(statement->scope, ',');
 
-    dtype->value = compiler_VariableType(compiler);
+    dtype->value = compiler_GetVariableType(compiler, statement);
 
     ret->isDictionary = true;
     ret->type = dtype;
 
-    match('}');
+    match(statement->scope, '}');
   } else {
-    PERROR("compiler_VariableType", "Unsupported complex variable definition");
+    PERROR("compiler_GetVariableType", "Unsupported complex variable definition");
     exit(-1);
   }
 
   return ret;
 }
 
-void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
-  match('(');
+s_statement *compile_VariableDefinition(s_symbol *name, s_compiler *compiler, s_statement *parent) {
+  s_statement *ret = statement_Create(compiler, parent, VARIABLE_DEF);
 
-
-
-}
-
-void compiler_VariableDefinition(s_compiler *compiler, s_symbol *name) {
-  match(':');
+  match(ret->scope, ':');
 
   s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)malloc(sizeof(s_symbolbody_variable));
   name->body = symbol_body;
 
-  s_anytype *type = compiler_VariableType(compiler);
+  s_anytype *type = compiler_GetVariableType(compiler, ret);
   symbol_body->type = type;
 
   if (token.type == Assign) {
-    symbol_body->init_expression = compiler_Expression(compiler);
+    //symbol_body->init_expression = compiler_Expression(compiler);
   }
 
-  match(';');
+  match(ret->scope, ';');
 
-  return;
+  return ret;
 }
 
-void compiler_Statement(s_compiler *compiler) {
+void compile_Statement(s_compiler *compiler, s_statement *statement) {
   // Statements types:
   // 1. if (...) <statement> [else <statement>]
   // 2. for (...) <statement>
@@ -630,8 +791,9 @@ void compiler_Statement(s_compiler *compiler) {
   // 4. { <statement> }
   // 5. return xxx;
   // 6. <empty statement>;
-  // 7. variable : type [ = expression];
-  // 8. function(...) : type { statement }
+  // 7. variable : type [ = <expression>];
+  // 8. function(...) : type { <statement> }
+  // 9. class { <statement> }
   // 9. expression; (expression end with semicolon)
 
   if (token.type == If) {
@@ -642,53 +804,53 @@ void compiler_Statement(s_compiler *compiler) {
 
   } else if (token.type == '{') {
     // Block statement
-    match('{');
+    match(statement->scope, '{');
 
     while (token.type != '}') {
-      compiler_Statement(compiler);
+      s_statement *sub_statement = statement_Create(compiler, statement, STATEMENT);
+      list_push(statement->statements, sub_statement);
+      compile_Statement(compiler, sub_statement);
     }
 
-    match('}');
+    match(statement->scope, '}');
   } else if (token.type == Return) {
 
   } else if (token.type == ';') {
     // Empty statement
-    match(';');
+    match(statement->scope, ';');
   } else if (token.type == Id) {
     if (token.symbol->isUppercase) { // Only class
-      compiler_ClassDefinition(compiler);
+      //compiler_ClassDefinition(compiler);
     } else if (token.symbol->isFullcase) { // Constant property
 
     } else if (token.symbol->startsUnderscore) { // Private property
 
     } else {
       s_symbol *name_symbol = token.symbol;
-      match(Id);
+      match(statement->scope, Id);
 
       if (token.type == ':') {
         // Variable definition
-        compiler_VariableDefinition(compiler, name_symbol);
+        s_statement *sub_statement = compile_VariableDefinition(name_symbol, compiler, statement);
+        list_push(statement->statements, sub_statement);
       } else if (token.type == '(') {
         // Function definition
-        compiler_FunctionDefinition(compiler, name_symbol);
+        //compiler_FunctionDefinition(compiler, name_symbol);
       } else {
         // Expression (espresso ?)
-        compiler_Expression(compiler);
-        match(';');
+        //compiler_Expression(compiler);
+        match(statement->scope, ';');
       }
     }
   } else {
     // Expression (espresso ?)
-    compiler_Expression(compiler);
-    match(';');
+    //compiler_Expression(compiler);
+    match(statement->scope, ';');
   }
 }
 
-void compiler_Next(s_compiler *compiler) {
-  compiler_Statement(compiler);
-  parse_Next(compiler->parser);
-}
 
+#undef emit
 #undef match
 #undef token
 
@@ -709,41 +871,10 @@ int main() {
 
   char *srcFilename = "helloworld.up";
 
-  const int poolsize = 256 * 1024; // arbitrary size
-
-  rootScope = scope_Init(poolsize);
-
-  // Init scope with keywords
-  s_parser *_parser;
-  int i;
-
-  const char *keywords_types = "Char Short Int Long Float Double String Bool Unsigned";
-  _parser = parse_Init(rootScope, keywords_types);
-
-  i = Char;
-  while (i <= Unsigned) {
-    parse_Next(_parser);
-    _parser->token.symbol->token = i++;
-  }
-
-  const char *keywords = "else enum if return sizeof while for switch";
-  _parser = parse_Init(rootScope, keywords);
-
-  i = Else;
-  while (i <= Switch) {
-    parse_Next(_parser);
-    _parser->token.symbol->token = i++;
-  }
-
-  // Source code parser
-  s_parser *parser = parse_InitFromFile(rootScope, srcFilename, poolsize);
-
   // Compiler
-  s_compiler *compiler = compiler_Init(parser, poolsize);
-
-  int tok = parse_Next(parser);
+  s_compiler *compiler = compiler_InitFromFile(srcFilename);
   
-  compiler_Next(compiler);
+  compiler_Execute(compiler);
 
   return 0;
 }
