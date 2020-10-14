@@ -1,8 +1,8 @@
 // Using basic types
-m : Int = 5;
-r : Int = 3;
+    m    :      Int       =5; // Hello
+r:Int=3;
 
-<(r + m);
+<r + (m + 8);
 <(m+m+m+m+m+m+m+m+m);
 
 m = 775;

@@ -690,6 +690,15 @@ void compiler_Execute(s_compiler *compiler) {
   __core_exe_statement(compiler->rootStatement);
 }
 
+void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
+  compiler->parser = parse_Init(code);
+
+  parse_Next(compiler->rootStatement->scope, compiler->parser);
+
+  compile_Statement(compiler, compiler->rootStatement);
+
+  __core_exe_statement(compiler->rootStatement);
+}
 
 s_expression_operation *expression_Emit(s_list *core_operations, s_token token) {
   s_expression_operation *op = NEW(s_expression_operation);
@@ -972,8 +981,6 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
 
 /* ##### CORE Libs ##### */
 void __core_print(s_stack__s_anyvalue *stack) {
-  printf("__core_print\n");
-  
   s_anyvalue a = stack_pop__s_anyvalue(stack);
 
   if (a.type.isPrimary) {
@@ -1006,8 +1013,6 @@ void __core_assign(s_symbol *symbol, s_anyvalue item) {
 }
 
 void __core_add(s_stack__s_anyvalue *stack) {
-  printf("__core_add\n");
-
   s_anyvalue a = stack_pop__s_anyvalue(stack);
   s_anyvalue b = stack_pop__s_anyvalue(stack);
   s_anyvalue r;
@@ -1127,10 +1132,24 @@ int main() {
 
   char *srcFilename = "helloworld.up";
 
+
   // Compiler
   s_compiler *compiler = compiler_InitFromFile(srcFilename);
-  
   compiler_Execute(compiler);
+
+  return 0;
+
+  // Interactive CLI (dream)
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t lineSize = 0;
+
+  while (1) {
+    lineSize = getline(&line, &len, stdin);
+    
+    compiler_ExecuteCLI(compiler, line);
+  }
+
 
   return 0;
 }
