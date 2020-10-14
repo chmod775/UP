@@ -259,14 +259,37 @@ char *symbol_GetCleanName(s_symbol *symbol) {
   return ret;
 }
 
-s_symbol *symbol_CreateFromKeyword(char *keyword, int token) {
+s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
   s_symbol *ret = NEW(s_symbol);
 
   ret->hash = hashOfSymbol(keyword);
   ret->name = keyword;
   ret->length = strlen(keyword);
-  ret->token = token;
-  
+  ret->type = KEYWORD;
+
+  s_symbolbody_keyword *symbol_body = NEW(s_symbolbody_keyword);
+  symbol_body->token = token;
+  ret->body = symbol_body;
+
+  ret->isUppercase = isUppercase_String(keyword);
+  ret->isFullcase = isFullcase_String(keyword);
+  ret->startsUnderscore = startsUnderscore_String(keyword);
+
+  return ret;
+}
+
+s_symbol *symbol_CreateFromPrimaryType(char *keyword, e_primary_types type) {
+  s_symbol *ret = NEW(s_symbol);
+
+  ret->hash = hashOfSymbol(keyword);
+  ret->name = keyword;
+  ret->length = strlen(keyword);
+  ret->type = PRIMARYTYPE;
+
+  s_symbolbody_primarytype *symbol_body = NEW(s_symbolbody_primarytype);
+  symbol_body->type = type;
+  ret->body = symbol_body;
+
   ret->isUppercase = isUppercase_String(keyword);
   ret->isFullcase = isFullcase_String(keyword);
   ret->startsUnderscore = startsUnderscore_String(keyword);
@@ -290,15 +313,15 @@ s_scope *scope_CreateAsRoot() {
   s_scope *ret = scope_Create(NULL);
 
   // Init symbols with base types
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Char", TOKEN_Char));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Short", TOKEN_Short));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Int", TOKEN_Int));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Long", TOKEN_Long));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Float", TOKEN_Float));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Double", TOKEN_Double));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("String", TOKEN_String));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Bool", TOKEN_Bool));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("Unsigned", TOKEN_Unsigned));
+  //parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Char", TOKEN_Char));
+  //parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Short", TOKEN_Short));
+  parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Int", TYPE_Int64));
+  //parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Long", TOKEN_Long));
+  parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Float", TYPE_Float32));
+  parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Double", TYPE_Float64));
+  //parlist_push(ret->symbols, symbol_CreateFromPrimaryType("String", TOKEN_String));
+  //parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Bool", TOKEN_Bool));
+  //parlist_push(ret->symbols, symbol_CreateFromPrimaryType("Unsigned", TOKEN_Unsigned));
 
   // Init symbols with base keywords
   parlist_push(ret->symbols, symbol_CreateFromKeyword("else", TOKEN_Else));
@@ -333,8 +356,8 @@ s_parser *parse_Init(char *str) {
   return ret;
 }
 
-bool parse_IsTokenBasicType(s_token token) {
-  return (token.type >= TOKEN_Char) && (token.type <= TOKEN_Unsigned);
+bool parse_IsTokenPrimaryType(s_token token) {
+  return ((token.type == TOKEN_Symbol) && (token.value.symbol->type == PRIMARYTYPE));
 }
 
 int parse_Next(s_scope *scope, s_parser *parser) {
@@ -375,11 +398,15 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       // Search for define symbol
       s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
 
-      while ((symbol_ptr != NULL) && symbol_ptr->token) {
+      while (symbol_ptr != NULL) {
         if (symbol_ptr->hash) {
           if (!memcmp(symbol_ptr->name, last_pos, symbol_ptr->length)) {
-            // Found symbol, return it
-            ret(symbol_ptr->token, symbol_ptr, symbol);
+            if (symbol_ptr->type == KEYWORD) {
+              s_symbolbody_keyword *symbol_body = (s_symbolbody_keyword *)symbol_ptr->body;
+              ret(symbol_body->token, NULL, any);
+            } else {
+              ret(TOKEN_Symbol, symbol_ptr, symbol);
+            }
           }
         }
         symbol_ptr = (s_symbol *)parlist_read_next(scope->symbols);
@@ -391,7 +418,6 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       new_symbol->hash = hash;
       new_symbol->name = last_pos;
       new_symbol->length = src - last_pos;
-      new_symbol->token = TOKEN_Symbol;
       
       new_symbol->isUppercase = isUppercase_String(last_pos);
       new_symbol->isFullcase = isFullcase_String(last_pos);
@@ -586,6 +612,17 @@ int parse_Match(s_scope *scope, s_parser *parser, int token) {
 s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_statementtype type) {
   s_statement *ret = NEW(s_statement);
 
+  ret->parent = parent->parent;
+  ret->scope = parent->scope;
+
+  ret->type = type;
+  
+  return ret;
+}
+
+s_statement *statement_CreateChildren(s_compiler *compiler, s_statement *parent, e_statementtype type) {
+  s_statement *ret = NEW(s_statement);
+
   if (parent == NULL) { // Root statement
     ret->parent = NULL;
     ret->scope = compiler->rootScope;
@@ -599,7 +636,6 @@ s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_state
   return ret;
 }
 
-
 /* ##### Compiler ##### */
 s_compiler *compiler_Init(char *content) {
   s_compiler *ret = NEW(s_compiler);
@@ -607,7 +643,7 @@ s_compiler *compiler_Init(char *content) {
   ret->rootScope = scope_CreateAsRoot();
   if (!ret->rootScope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
-  ret->rootStatement = statement_Create(ret, NULL, STATEMENT);
+  ret->rootStatement = statement_CreateChildren(ret, NULL, STATEMENT);
   if (!ret->rootStatement) { PERROR("compiler_Init", "Could not malloc root statement"); return NULL; }
 
   s_statementbody_statement *statement_body = NEW(s_statementbody_statement);
@@ -646,6 +682,7 @@ s_compiler *compiler_InitFromFile(char *filename) {
 void compiler_Execute(s_compiler *compiler) {
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
+  compile_Statement(compiler, compiler->rootStatement);
   compile_Statement(compiler, compiler->rootStatement);
   compile_Statement(compiler, compiler->rootStatement);
   compile_Statement(compiler, compiler->rootStatement);
@@ -771,13 +808,17 @@ void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
 s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
   s_anytype *ret = NEW(s_anytype);
 
+  ret->isPrimary = false;
   ret->isDictionary = false;
   ret->isList = false;
+  ret->isClass = false;
   ret->type = NULL;
 
-  if (parse_IsTokenBasicType(token)) {
-    // Basic type
-    ret->type = token.type;
+  if (parse_IsTokenPrimaryType(token)) {
+    // Primary type
+    ret->isPrimary = true;
+    s_symbolbody_primarytype *symbol_body = (s_symbolbody_primarytype *)token.value.symbol->body;
+    ret->type = (void *)symbol_body->type;
     match(statement->scope, token.type);
   } else if (token.type == '[') {
     // List
@@ -794,8 +835,8 @@ s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
     // Dictionary
     match(statement->scope, '{');
 
-    if (!parse_IsTokenBasicType(token)) {
-      PERROR("compile_VariableType", "Dictionary key can only be of basic type");
+    if (!parse_IsTokenPrimaryType(token)) {
+      PERROR("compile_VariableType", "Dictionary key can only be of primary type");
       exit(-1);
     }
 
@@ -874,7 +915,7 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
     match(statement->scope, '{');
 
     while (token.type != '}') {
-      s_statement *sub_statement = statement_Create(compiler, statement, STATEMENT);
+      s_statement *sub_statement = statement_CreateChildren(compiler, statement, STATEMENT);
       sub_statement->exe_cb = &__core_exe_statement;
 
       s_statementbody_statement *sub_statement_body = NEW(s_statementbody_statement);
@@ -911,7 +952,8 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
         //compiler_FunctionDefinition(compiler, name_symbol);
       } else {
         // Expression (espresso ?)
-        //compiler_Expression(compiler);
+        s_statement *sub_statement = compile_Expression(compiler, statement);
+        list_push(statement_body->statements, sub_statement);
         match(statement->scope, ';');
       }
     }
@@ -930,8 +972,24 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
 
 /* ##### CORE Libs ##### */
 void __core_print(s_stack__s_anyvalue *stack) {
-  printf("__core_print");
+  printf("__core_print\n");
+  
+  s_anyvalue a = stack_pop__s_anyvalue(stack);
 
+  if (a.type.isPrimary) {
+    int mainType = (int)a.type.type;
+    if ((mainType >= TYPE_Int8) && (mainType <= TYPE_Int64)) {
+      printf("%d\n", a.content);
+    } else if ((mainType >= TYPE_UInt8) && (mainType <= TYPE_UInt64)) {
+      printf("%d\n", a.content);
+    } else if (mainType == TYPE_Float32) {
+      printf("%f\n", a.content);
+    } else if (mainType == TYPE_Float64) {
+      printf("%f\n", a.content);
+    } else {
+      PERROR("__core_print", "Unsupported primary type");
+    }
+  }
 }
 
 void __core_assign(s_symbol *symbol, s_anyvalue item) {
@@ -948,7 +1006,7 @@ void __core_assign(s_symbol *symbol, s_anyvalue item) {
 }
 
 void __core_add(s_stack__s_anyvalue *stack) {
-  printf("__core_add");
+  printf("__core_add\n");
 
   s_anyvalue a = stack_pop__s_anyvalue(stack);
   s_anyvalue b = stack_pop__s_anyvalue(stack);
@@ -992,6 +1050,15 @@ s_anyvalue __core_exe_expression(s_statement *statement) {
   do {
     if (op->token->type == TOKEN_Literal_Int) {
       stack_push__s_anyvalue(&stack, s_anyvalue_createPrimary(TYPE_Int64, op->token->value.integer));
+    } else if (op->token->type == TOKEN_Symbol) {
+      if (op->token->value.symbol->type == VARIABLE) {
+        s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)op->token->value.symbol->body;
+        stack_push__s_anyvalue(&stack, symbol_body->value);
+      } else if (op->token->value.symbol->type == FUNCTION) {
+      } else if (op->token->value.symbol->type == CLASS) {
+      } else {
+        PERROR("__core_exe_expression", "Symbol type not allowed for expression");
+      }
     } else {
       void (*cb)(s_stack__s_anyvalue *stack) = op->token->value.any;
       if (cb)

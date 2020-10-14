@@ -1,8 +1,9 @@
 // Using basic types
-m : Int;
-r : Float = 3 + 4;
+m : Int = 5;
+r : Int = 3;
 
-<r;
+<(r + m);
+<(m+m+m+m+m+m+m+m+m);
 
 m = 775;
 

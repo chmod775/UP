@@ -94,6 +94,8 @@ T stack_pop__##T(s_stack__##T *s) { \
 /* ##### Symbols ##### */
 typedef enum {
   NOTDEFINED,
+  KEYWORD,
+  PRIMARYTYPE,
   VARIABLE,
   FUNCTION,
   CLASS
@@ -104,8 +106,6 @@ typedef struct {
   char *name;
   int length;
 
-  int token;
-
   bool isUppercase;
   bool isFullcase;
   bool startsUnderscore;
@@ -115,7 +115,6 @@ typedef struct {
 } s_symbol;
 
 char *symbol_GetCleanName(s_symbol *symbol);
-s_symbol *symbol_CreateFromKeyword(char *keyword, int token);
 
 /* ##### Scope ##### */
 typedef struct _s_scope {
@@ -141,6 +140,10 @@ typedef enum {
   TYPE_Float32 = 0x40,
   TYPE_Float64
 } e_primary_types;
+
+typedef struct {
+  e_primary_types type;
+} s_symbolbody_primarytype;
 
 typedef struct {
   bool isPrimary;
@@ -170,6 +173,8 @@ typedef struct {
 } s_listtype;
 
 s_anyvalue s_anyvalue_createPrimary(int type, void *value);
+
+s_symbol *symbol_CreateFromPrimaryType(char *keyword, e_primary_types type);
 
 /* ##### Parser ##### */
 typedef union {
@@ -203,6 +208,10 @@ typedef enum {
   TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
 } e_token;
 
+typedef struct {
+  e_token token;
+} s_symbolbody_keyword;
+
 s_parser *parse_Init(char *str);
 
 bool parse_IsTokenBasicType(s_token token);
@@ -210,6 +219,8 @@ bool parse_IsTokenBasicType(s_token token);
 int parse_Next(s_scope *scope, s_parser *parser);
 
 int parse_Match(s_scope *scope, s_parser *parser, int token);
+
+s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
 
 
 /* ##### STATEMENT ##### */
