@@ -65,6 +65,32 @@ void parlist_add(s_parlist *pl, void *value);
 
 void parlist_push(s_parlist *pl, void *value);
 
+/* ##### STACK ##### */
+#define define_stack(T) \
+typedef struct { \
+  T *content; \
+  u_int64_t ptr; \
+  u_int64_t size; \
+} s_stack__##T; \
+s_stack__##T stack_create__##T(int size) { \
+  s_stack__##T ret; \
+  ret.size = size; \
+  ret.ptr = 0; \
+  ret.content = (T *)malloc(size * sizeof(T)); \
+  return ret; \
+} \
+void stack_free__##T(s_stack__##T s) { \
+  free(s.content); \
+} \
+void stack_push__##T(s_stack__##T *s, T value) { \
+  s->content[s->ptr] = value; \
+  s->ptr++; \
+} \
+T stack_pop__##T(s_stack__##T *s) { \
+  s->ptr--; \
+  return s->content[s->ptr]; \
+} \
+
 /* ##### Symbols ##### */
 typedef enum {
   NOTDEFINED,
@@ -100,47 +126,38 @@ typedef struct _s_scope {
 s_scope *scope_Create(s_scope *parent);
 s_scope *scope_CreateAsRoot();
 
-
-/* ##### Parser ##### */
-typedef struct {
-  int type;
-  int64_t value;
-  s_symbol *symbol;
-} s_token;
-
-typedef struct {
-  char *source;
-  char *ptr;
-  int line;
-  s_token token;
-} s_parser;
-
-typedef enum {
-  Num = 128, Fun, Sys, Glo, Loc, Id, Class, Var,
-  Char, Short, Int, Long, Float, Double, String, Bool, Unsigned,
-  Else, Enum, If, Return, Sizeof, While, For, Switch,
-  Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
-} e_token;
-
-s_parser *parse_Init(char *str);
-
-bool parse_IsTokenBasicType(s_token token);
-
-int parse_Next(s_scope *scope, s_parser *parser);
-
-int parse_Match(s_scope *scope, s_parser *parser, int token);
-
-
 /* ##### Types ##### */
+typedef enum {
+  TYPE_Int8 = 0x10,
+  TYPE_Int16,
+  TYPE_Int32,
+  TYPE_Int64,
+
+  TYPE_UInt8 = 0x20,
+  TYPE_UInt16,
+  TYPE_UInt32,
+  TYPE_UInt64,
+
+  TYPE_Float32 = 0x40,
+  TYPE_Float64
+} e_primary_types;
+
 typedef struct {
+  bool isPrimary;
   bool isDictionary;
   bool isList;
+  bool isClass;
+  // In case of:
+  //  Primary: type = e_primary_types
+  //  Dictionary: *type = s_anytype
+  //  List: *type = s_anytype
+  //  Class: *type = s_symbol
   void *type;
 } s_anytype;
 
 typedef struct {
+  s_anytype type;
   void *content;
-  s_anytype *type;
 } s_anyvalue;
 
 typedef struct {
@@ -151,6 +168,49 @@ typedef struct {
 typedef struct {
   s_anytype *items;
 } s_listtype;
+
+s_anyvalue s_anyvalue_createPrimary(int type, void *value);
+
+/* ##### Parser ##### */
+typedef union {
+  int64_t integer;
+  double decimal;
+  char *string;
+  s_symbol *symbol;
+  void *any;
+} u_token_value;
+
+typedef struct {
+  int type;
+  u_token_value value;
+} s_token;
+
+typedef struct {
+  char *source;
+  char *ptr;
+  int line;
+  s_token token;
+} s_parser;
+
+typedef enum {
+  TOKEN_Symbol = 128, TOKEN_Var,
+
+  TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
+
+  TOKEN_Char, TOKEN_Short, TOKEN_Int, TOKEN_Long, TOKEN_Float, TOKEN_Double, TOKEN_String, TOKEN_Bool, TOKEN_Unsigned,
+
+  TOKEN_Else, TOKEN_Enum, TOKEN_If, TOKEN_Return, TOKEN_Sizeof, TOKEN_While, TOKEN_For, TOKEN_Switch,
+  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
+} e_token;
+
+s_parser *parse_Init(char *str);
+
+bool parse_IsTokenBasicType(s_token token);
+
+int parse_Next(s_scope *scope, s_parser *parser);
+
+int parse_Match(s_scope *scope, s_parser *parser, int token);
+
 
 /* ##### STATEMENT ##### */
 typedef enum {
@@ -197,14 +257,14 @@ void compile_Statement(s_compiler *compiler, s_statement *statement);
 
 /* ##### Expression ##### */
 typedef struct {
-  int token;
-  void *value;
+  s_token *token;
 } s_expression_operation;
 
 typedef struct {
   s_list *core_operations;
 } s_statementbody_expression;
 
+s_expression_operation *expression_Emit(s_list *core_operations, s_token token);
 void expression_Step(s_compiler *compiler, s_statement *statement, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
@@ -241,24 +301,25 @@ void compile_ClassDefinition(s_compiler *compiler);
 
 
 /* ##### CORE structs ##### */
-typedef struct {
-  s_anyvalue content[50];
-  int ptr;
-} __core_expression_stack;
+define_stack(s_anyvalue)
 
 typedef struct {
   s_anyvalue content[32];
 } __core_function_arguments;
 
 /* ##### CORE libs ##### */
+void __core_print(s_stack__s_anyvalue *stack);
+
 void __core_assign(s_symbol *symbol, s_anyvalue item);
-void __core_add(__core_expression_stack *stack);
-void __core_sub(__core_expression_stack *stack);
-void __core_mul(__core_expression_stack *stack);
-void __core_div(__core_expression_stack *stack);
+
+void __core_add(s_stack__s_anyvalue *stack);
+void __core_sub(s_stack__s_anyvalue *stack);
+void __core_mul(s_stack__s_anyvalue *stack);
+void __core_div(s_stack__s_anyvalue *stack);
 
 s_anyvalue __core_exe_expression(s_statement *statement);
 
+void __core_expression(s_statement *statement);
 void __core_variable_def(s_statement *statement);
 void __core_call_function(s_statement *statement);
 

@@ -2,6 +2,8 @@
 m : Int;
 r : Float = 3 + 4;
 
+<r;
+
 m = 775;
 
 print(m);
