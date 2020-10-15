@@ -6,6 +6,7 @@
 #include "up.h"
 
 #define PERROR(A, B, ...) { printf("[" A "] Error! - " B "\n", ##__VA_ARGS__); exit(-1); }
+#define CERROR(C, A, B, ...) { printf("[" A "] Error Line: %d - " B "\n", (C->parser->line) ##__VA_ARGS__); exit(-1); }
 
 void *t_new = NULL;
 #define NEW(T) t_new = malloc(sizeof(T)); if (t_new == NULL) { PERROR("NEW(##T)", "Could not malloc"); exit(-1); }
@@ -490,6 +491,12 @@ int parse_Next(s_scope *scope, s_parser *parser) {
         while (*src != 0 && *src != '\n') {
           ++src;
         }
+      } else if (*src == '*') {
+        // Block comment
+        int _token = 0;
+        do {
+          _token = parse_Next(scope, parser);
+        } while (_token != TOKEN_CommentBlock_End);
       } else {
         // divide operator
         ret(TOKEN_Div, NULL, any);
@@ -580,7 +587,12 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       ret(TOKEN_Mod, NULL, any);
     }
     else if (token == '*') {
-      ret(TOKEN_Mul, NULL, any);
+      if (*src == '/') {
+        src ++;
+        ret(TOKEN_CommentBlock_End, NULL, any);
+      } else {
+        ret(TOKEN_Mul, NULL, any);
+      }
     }
     else if (token == '?') {
       ret(TOKEN_Cond, NULL, any);
@@ -606,6 +618,12 @@ int parse_Match(s_scope *scope, s_parser *parser, int token) {
       printf("Line %d: expected token: %d\n", parser->line, token);
     exit(-1);
   }
+}
+
+s_token parse_Preview(s_scope *scope, s_parser *parser) {
+  s_parser _parser = *parser;
+  parse_Next(scope, &_parser);
+  return _parser.token;
 }
 
 /* ##### STATEMENT ##### */
@@ -682,10 +700,8 @@ s_compiler *compiler_InitFromFile(char *filename) {
 void compiler_Execute(s_compiler *compiler) {
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
-  compile_Statement(compiler, compiler->rootStatement);
-  compile_Statement(compiler, compiler->rootStatement);
-  compile_Statement(compiler, compiler->rootStatement);
-  compile_Statement(compiler, compiler->rootStatement);
+  while (compiler->parser->token.type > 0)
+    compile_Statement(compiler, compiler->rootStatement);
 
   __core_exe_statement(compiler->rootStatement);
 }
@@ -709,7 +725,7 @@ s_expression_operation *expression_Emit(s_list *core_operations, s_token token) 
   return op;
 }
 
-s_expression_operation *expression_Emit_Callback(s_list *core_operations, int type, void (*cb)(s_stack__s_anyvalue *)) {
+s_expression_operation *expression_Emit_Callback(s_list *core_operations, int type, void (*cb)(s_stack__core_expression_item *)) {
   s_expression_operation *op = NEW(s_expression_operation);
   s_token *token_copy = NEW(s_token);
   token_copy->type = type;
@@ -721,6 +737,7 @@ s_expression_operation *expression_Emit_Callback(s_list *core_operations, int ty
 
 #define token (compiler->parser->token)
 #define match(S, A) parse_Match((S), compiler->parser, (A))
+#define preview(S) parse_Preview((S), compiler->parser)
 #define emit(O, A) list_push(O, (A))
 
 
@@ -748,17 +765,24 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     expression_Step(compiler, statement, TOKEN_Lt);
     expression_Emit_Callback(core_operations, TOKEN_Lt, &__core_print);
   } else {
-    PERROR("expression_Step", "Bad expression");
+    CERROR(compiler, "expression_Step", "Bad expression");
     exit(-1);
   }
 
   // binary operator and postfix operators.
   while (token.type >= level) {
-    if (token.type == TOKEN_Add) {
+    if (token.type == TOKEN_Assign) {
+      match(statement->scope, TOKEN_Assign);
+      expression_Step(compiler, statement, TOKEN_Assign);
+      expression_Emit_Callback(core_operations, TOKEN_Assign, &__core_assign);
+    } else if (token.type == TOKEN_Add) {
       match(statement->scope, TOKEN_Add);
       expression_Step(compiler, statement, TOKEN_Mul);
 
       expression_Emit_Callback(core_operations, TOKEN_Add, &__core_add);
+    } else {
+      CERROR(compiler, "expression_Step", "Compiler error");
+      exit(-1);
     }
   }
 }
@@ -869,8 +893,11 @@ s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
   return ret;
 }
 
-s_statement *compile_VariableDefinition(s_symbol *name, s_compiler *compiler, s_statement *parent) {
+s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *parent) {
   s_statement *ret = statement_Create(compiler, parent, VARIABLE_DEF);
+
+  s_symbol *name = token.value.symbol;
+  match(ret->scope, TOKEN_Symbol);
 
   ret->exe_cb = &__core_variable_def;
 
@@ -949,14 +976,13 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
     } else if (token.value.symbol->startsUnderscore) { // Private property
 
     } else {
-      s_symbol *name_symbol = token.value.symbol;
-      match(statement->scope, TOKEN_Symbol);
+      s_token next_token = preview(statement->scope);
 
-      if (token.type == ':') {
+      if (next_token.type == ':') {
         // Variable definition
-        s_statement *sub_statement = compile_VariableDefinition(name_symbol, compiler, statement);
+        s_statement *sub_statement = compile_VariableDefinition(compiler, statement);
         list_push(statement_body->statements, sub_statement);
-      } else if (token.type == '(') {
+      } else if (next_token.type == '(') {
         // Function definition
         //compiler_FunctionDefinition(compiler, name_symbol);
       } else {
@@ -976,12 +1002,20 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
 
 
 #undef emit
+#undef preview
 #undef match
 #undef token
 
 /* ##### CORE Libs ##### */
-void __core_print(s_stack__s_anyvalue *stack) {
-  s_anyvalue a = stack_pop__s_anyvalue(stack);
+core_expression_item core_expression_item_Create(s_expression_operation *op, s_anyvalue value) {
+  core_expression_item ret;
+  ret.op = op;
+  ret.value = value;
+  return ret;
+}
+
+void __core_print(s_stack__core_expression_item *stack) {
+  s_anyvalue a = stack_pop__core_expression_item(stack).value;
 
   if (a.type.isPrimary) {
     int mainType = (int)a.type.type;
@@ -999,7 +1033,7 @@ void __core_print(s_stack__s_anyvalue *stack) {
   }
 }
 
-void __core_assign(s_symbol *symbol, s_anyvalue item) {
+void __core_exe_assign(s_symbol *symbol, s_anyvalue item) {
   if (symbol->type != VARIABLE) { PERROR("__core_assign", "Wrong symbol type"); exit(1); }
 
   s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)symbol->body;
@@ -1012,9 +1046,23 @@ void __core_assign(s_symbol *symbol, s_anyvalue item) {
   }
 }
 
-void __core_add(s_stack__s_anyvalue *stack) {
-  s_anyvalue a = stack_pop__s_anyvalue(stack);
-  s_anyvalue b = stack_pop__s_anyvalue(stack);
+void __core_assign(s_stack__core_expression_item *stack) {
+  s_anyvalue a = stack_pop__core_expression_item(stack).value;
+
+  core_expression_item b = stack_pop__core_expression_item(stack);
+  if (b.op == NULL) PERROR("__core_assign", "Stack assign destination cannot be NULL");
+  if (b.op->token->type != TOKEN_Symbol) PERROR("__core_assign", "Assignment destination not valid");
+
+  s_symbol *dest_symbol = b.op->token->value.symbol;
+
+  __core_exe_assign(dest_symbol, a);
+
+  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, a));
+}
+
+void __core_add(s_stack__core_expression_item *stack) {
+  s_anyvalue a = stack_pop__core_expression_item(stack).value;
+  s_anyvalue b = stack_pop__core_expression_item(stack).value;
   s_anyvalue r;
 
   bool isPrimary = a.type.isPrimary && b.type.isPrimary;
@@ -1037,14 +1085,14 @@ void __core_add(s_stack__s_anyvalue *stack) {
     PERROR("__core_add", "Unsupported operation");
   }
 
-  stack_push__s_anyvalue(stack, r);
+  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, r));
 }
-void __core_sub(s_stack__s_anyvalue *stack) {}
-void __core_mul(s_stack__s_anyvalue *stack) {}
-void __core_div(s_stack__s_anyvalue *stack) {}
+void __core_sub(s_stack__core_expression_item *stack) {}
+void __core_mul(s_stack__core_expression_item *stack) {}
+void __core_div(s_stack__core_expression_item *stack) {}
 
 s_anyvalue __core_exe_expression(s_statement *statement) {
-  s_stack__s_anyvalue stack = stack_create__s_anyvalue(50);
+  s_stack__core_expression_item stack = stack_create__core_expression_item(50);
   stack.ptr = 0;
 
   s_statementbody_expression *statement_body = (s_statementbody_expression *)statement->body;
@@ -1054,27 +1102,27 @@ s_anyvalue __core_exe_expression(s_statement *statement) {
 
   do {
     if (op->token->type == TOKEN_Literal_Int) {
-      stack_push__s_anyvalue(&stack, s_anyvalue_createPrimary(TYPE_Int64, op->token->value.integer));
+      stack_push__core_expression_item(&stack, core_expression_item_Create(op, s_anyvalue_createPrimary(TYPE_Int64, op->token->value.integer)));
     } else if (op->token->type == TOKEN_Symbol) {
       if (op->token->value.symbol->type == VARIABLE) {
         s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)op->token->value.symbol->body;
-        stack_push__s_anyvalue(&stack, symbol_body->value);
+        stack_push__core_expression_item(&stack, core_expression_item_Create(op, symbol_body->value));
       } else if (op->token->value.symbol->type == FUNCTION) {
       } else if (op->token->value.symbol->type == CLASS) {
       } else {
         PERROR("__core_exe_expression", "Symbol type not allowed for expression");
       }
     } else {
-      void (*cb)(s_stack__s_anyvalue *stack) = op->token->value.any;
+      void (*cb)(s_stack__core_expression_item *stack) = op->token->value.any;
       if (cb)
         cb(&stack);
     }
     op = list_read_next(core_operations);
   } while (op != NULL);
 
-  s_anyvalue ret = stack_pop__s_anyvalue(&stack);
+  s_anyvalue ret = stack_pop__core_expression_item(&stack).value;
 
-  stack_free__s_anyvalue(stack);
+  stack_free__core_expression_item(stack);
 
   return ret;
 }
@@ -1092,7 +1140,7 @@ void __core_variable_def(s_statement *statement) {
 
   if (symbol_body->init_expression != NULL) {
     s_anyvalue exp_result = __core_exe_expression(symbol_body->init_expression);
-    __core_assign(symbol, exp_result);
+    __core_exe_assign(symbol, exp_result);
   }
 }
 

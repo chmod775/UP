@@ -204,6 +204,8 @@ typedef enum {
 
   TOKEN_Char, TOKEN_Short, TOKEN_Int, TOKEN_Long, TOKEN_Float, TOKEN_Double, TOKEN_String, TOKEN_Bool, TOKEN_Unsigned,
 
+  TOKEN_CommentBlock_End,
+
   TOKEN_Else, TOKEN_Enum, TOKEN_If, TOKEN_Return, TOKEN_Sizeof, TOKEN_While, TOKEN_For, TOKEN_Switch,
   TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
 } e_token;
@@ -217,6 +219,8 @@ s_parser *parse_Init(char *str);
 bool parse_IsTokenBasicType(s_token token);
 
 int parse_Next(s_scope *scope, s_parser *parser);
+
+s_token parse_Preview(s_scope *scope, s_parser *parser);
 
 int parse_Match(s_scope *scope, s_parser *parser, int token);
 
@@ -290,7 +294,7 @@ typedef struct {
 } s_statementbody_variable;
 
 s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement);
-s_statement *compile_VariableDefinition(s_symbol *name, s_compiler *compiler, s_statement *parent);
+s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### FUNCTION ##### */
 typedef struct {
@@ -312,23 +316,31 @@ void compile_ClassDefinition(s_compiler *compiler);
 
 
 /* ##### CORE structs ##### */
-define_stack(s_anyvalue)
+typedef struct {
+  s_anyvalue value;
+  s_expression_operation *op;
+} core_expression_item;
+
+core_expression_item core_expression_item_Create(s_expression_operation *op, s_anyvalue value);
+
+define_stack(core_expression_item)
 
 typedef struct {
   s_anyvalue content[32];
 } __core_function_arguments;
 
 /* ##### CORE libs ##### */
-void __core_print(s_stack__s_anyvalue *stack);
-
-void __core_assign(s_symbol *symbol, s_anyvalue item);
-
-void __core_add(s_stack__s_anyvalue *stack);
-void __core_sub(s_stack__s_anyvalue *stack);
-void __core_mul(s_stack__s_anyvalue *stack);
-void __core_div(s_stack__s_anyvalue *stack);
-
 s_anyvalue __core_exe_expression(s_statement *statement);
+void __core_exe_assign(s_symbol *symbol, s_anyvalue item);
+
+void __core_print(s_stack__core_expression_item *stack);
+
+void __core_assign(s_stack__core_expression_item *stack);
+
+void __core_add(s_stack__core_expression_item *stack);
+void __core_sub(s_stack__core_expression_item *stack);
+void __core_mul(s_stack__core_expression_item *stack);
+void __core_div(s_stack__core_expression_item *stack);
 
 void __core_expression(s_statement *statement);
 void __core_variable_def(s_statement *statement);

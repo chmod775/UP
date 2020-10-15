@@ -1,22 +1,24 @@
 // Using basic types
     m    :      Int       =5; // Hello
-r:Int=3;
+r:Int = 0;
 
+r = m + 3;
+<r;
 <r + (m + 8);
 <(m+m+m+m+m+m+m+m+m);
 
 m = 775;
 
-print(m);
-print(r);
+<(m);
+<(r);
 
 s1:Int = 1;
 s2:Int = 2;
 s3:Int = s1 + s2;
 
-print(s3);
+<(s3);
 
-
+/*
 // Using global types classes (String and Number)
 a : String = "Hello";
 b : String = "World!";
@@ -30,3 +32,4 @@ print('Value of {a} is: {pi}');
 c : String;
 c = '{a} {b} {pi}';
 print(c);
+*/
