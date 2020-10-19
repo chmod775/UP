@@ -229,10 +229,10 @@ s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
 
 /* ##### STATEMENT ##### */
 typedef enum {
+  BLOCK,
   IF,
   FOR,
   WHILE,
-  STATEMENT,
   RETURN,
   VARIABLE_DEF,
   FUNCTION_DEF,
@@ -242,7 +242,7 @@ typedef enum {
 
 typedef struct {
   s_list *statements;
-} s_statementbody_statement;
+} s_statementbody_block;
 
 typedef struct _s_statement {
   struct _s_statement *parent;
@@ -266,9 +266,22 @@ void compiler_Next(s_compiler *compiler);
 
 /* ##### STATEMENT ##### */
 s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_statementtype type);
-s_statement *statement_CreateAsRoot(s_compiler *compiler);
+s_statement *statement_CreateBlock(s_compiler *compiler, s_statement *parent);
 
-void compile_Statement(s_compiler *compiler, s_statement *statement);
+s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
+
+/* ##### For STATEMENT ##### */
+typedef struct {
+  s_statement *init;
+  s_statement *check;
+  s_statement *step;
+} s_statementbody_for;
+
+/* ##### While STATEMENT ##### */
+typedef struct {
+  s_statement *check;
+  s_statement *loop;
+} s_statementbody_while;
 
 /* ##### Expression ##### */
 typedef struct {
@@ -342,11 +355,18 @@ void __core_sub(s_stack__core_expression_item *stack);
 void __core_mul(s_stack__core_expression_item *stack);
 void __core_div(s_stack__core_expression_item *stack);
 
+void __core_inc(s_stack__core_expression_item *stack);
+void __core_dec(s_stack__core_expression_item *stack);
+
+void __core_cmp(s_stack__core_expression_item *stack);
+
 void __core_expression(s_statement *statement);
 void __core_variable_def(s_statement *statement);
 void __core_call_function(s_statement *statement);
 
 void __core_exe_statement(s_statement *statement);
+
+void __core_while(s_statement *statement);
 
 void __core_new_class_instance();
 

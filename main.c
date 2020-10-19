@@ -514,7 +514,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     else if (token == '+') {
       // parse '+' and '++'
       if (*src == '+') {
-        src ++;
+        src++;
         ret(TOKEN_Inc, NULL, any);
       } else {
         ret(TOKEN_Add, NULL, any);
@@ -638,7 +638,7 @@ s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_state
   return ret;
 }
 
-s_statement *statement_CreateChildren(s_compiler *compiler, s_statement *parent, e_statementtype type) {
+s_statement *statement_CreateBlock(s_compiler *compiler, s_statement *parent) {
   s_statement *ret = NEW(s_statement);
 
   if (parent == NULL) { // Root statement
@@ -649,8 +649,14 @@ s_statement *statement_CreateChildren(s_compiler *compiler, s_statement *parent,
     ret->scope = scope_Create(parent->scope);
   }
 
-  ret->type = type;
+  ret->type = BLOCK;
   
+  ret->exe_cb = &__core_exe_statement;
+
+  s_statementbody_block *ret_body = NEW(s_statementbody_block);
+  ret_body->statements = list_create();
+  ret->body = ret_body;
+
   return ret;
 }
 
@@ -661,10 +667,10 @@ s_compiler *compiler_Init(char *content) {
   ret->rootScope = scope_CreateAsRoot();
   if (!ret->rootScope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
-  ret->rootStatement = statement_CreateChildren(ret, NULL, STATEMENT);
+  ret->rootStatement = statement_CreateBlock(ret, NULL);
   if (!ret->rootStatement) { PERROR("compiler_Init", "Could not malloc root statement"); return NULL; }
 
-  s_statementbody_statement *statement_body = NEW(s_statementbody_statement);
+  s_statementbody_block *statement_body = NEW(s_statementbody_block);
   if (!statement_body) { PERROR("compiler_Init", "Could not malloc statement body"); return NULL; }
 
   statement_body->statements = list_create();
@@ -700,8 +706,12 @@ s_compiler *compiler_InitFromFile(char *filename) {
 void compiler_Execute(s_compiler *compiler) {
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
-  while (compiler->parser->token.type > 0)
-    compile_Statement(compiler, compiler->rootStatement);
+  s_statementbody_block *sub_statement_body = compiler->rootStatement->body;
+    
+  while (compiler->parser->token.type > 0) {
+    s_statement *statement = compile_Statement(compiler, compiler->rootStatement);
+    list_push(sub_statement_body->statements, statement);
+  }
 
   __core_exe_statement(compiler->rootStatement);
 }
@@ -758,7 +768,7 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
   } else if (token.type == TOKEN_Add) {
     // Convert string to number (Javascript like)
 
-  } else if (token.type == TOKEN_Inc || token.type == TOKEN_Dec) {
+  } else if (token.type == TOKEN_Inc) {
 
   } else if (token.type == TOKEN_Lt) {
     match(statement->scope, TOKEN_Lt);
@@ -780,6 +790,13 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
       expression_Step(compiler, statement, TOKEN_Mul);
 
       expression_Emit_Callback(core_operations, TOKEN_Add, &__core_add);
+    } else if (token.type == TOKEN_Inc) {
+      match(statement->scope, TOKEN_Inc);
+      expression_Emit_Callback(core_operations, TOKEN_Inc, &__core_inc);
+    } else if (token.type == TOKEN_Lt) {
+      match(statement->scope, TOKEN_Lt);
+      expression_Step(compiler, statement, TOKEN_Lt);
+      expression_Emit_Callback(core_operations, TOKEN_Inc, &__core_cmp);
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -830,7 +847,7 @@ void compiler_ClassDefinition(s_compiler *compiler) {
 }
 */
 /*
-void compiler_FunctionDefinition(s_compiler *compiler, s_symbol *name) {
+void compiler_FunctionDefinition(s_compiler *compiler) {
   match('(');
 
 
@@ -895,11 +912,10 @@ s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
 
 s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *parent) {
   s_statement *ret = statement_Create(compiler, parent, VARIABLE_DEF);
+  ret->exe_cb = &__core_variable_def;
 
   s_symbol *name = token.value.symbol;
   match(ret->scope, TOKEN_Symbol);
-
-  ret->exe_cb = &__core_variable_def;
 
   s_statementbody_variable *statement_body = NEW(s_statementbody_variable);
   statement_body->symbol = name;
@@ -926,7 +942,36 @@ s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *paren
   return ret;
 }
 
-void compile_Statement(s_compiler *compiler, s_statement *statement) {
+s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
+  s_statement *ret = statement_Create(compiler, parent, FOR);
+
+  s_statementbody_for *statement_body = NEW(s_statementbody_for);
+  ret->body = statement_body;
+
+  // Init statement
+  statement_body->check = compile_Expression(compiler, ret);
+
+  match(ret->scope, ';');
+
+  return ret;
+}
+
+s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
+  s_statement *ret = statement_Create(compiler, parent, WHILE);
+  ret->exe_cb = &__core_while;
+
+  match(ret->scope, TOKEN_While);
+
+  s_statementbody_while *statement_body = NEW(s_statementbody_while);
+  ret->body = statement_body;
+
+  statement_body->check = compile_Expression(compiler, ret);
+  statement_body->loop = compile_Statement(compiler, ret);
+
+  return ret;
+}
+
+s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   // Statements types:
   // 1. if (...) <statement> [else <statement>]
   // 2. for (...) <statement>
@@ -938,36 +983,33 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
   // 8. function(...) : type { <statement> }
   // 9. class { <statement> }
   // 9. expression; (expression end with semicolon)
-  s_statementbody_statement *statement_body = (s_statementbody_statement *)statement->body;
+
+  s_statement *ret = NULL;
 
   if (token.type == TOKEN_If) {
 
   } else if (token.type == TOKEN_For) {
 
   } else if (token.type == TOKEN_While) {
-
+    ret = compile_While(compiler, parent);
   } else if (token.type == '{') {
     // Block statement
-    match(statement->scope, '{');
+    match(parent->scope, '{');
+
+    ret = statement_CreateBlock(compiler, parent);
+    s_statementbody_block *ret_body = ret->body;
 
     while (token.type != '}') {
-      s_statement *sub_statement = statement_CreateChildren(compiler, statement, STATEMENT);
-      sub_statement->exe_cb = &__core_exe_statement;
-
-      s_statementbody_statement *sub_statement_body = NEW(s_statementbody_statement);
-      sub_statement_body->statements = list_create();
-      sub_statement->body = sub_statement_body;
-
-      list_push(statement_body->statements, sub_statement);
-      compile_Statement(compiler, sub_statement);
+      s_statement *statement = compile_Statement(compiler, ret);
+      list_push(ret_body->statements, statement);
     }
 
-    match(statement->scope, '}');
+    match(parent->scope, '}');
   } else if (token.type == TOKEN_Return) {
 
   } else if (token.type == ';') {
     // Empty statement
-    match(statement->scope, ';');
+    match(parent->scope, ';');
   } else if (token.type == TOKEN_Symbol) {
     if (token.value.symbol->isUppercase) { // Only class
       //compiler_ClassDefinition(compiler);
@@ -976,28 +1018,26 @@ void compile_Statement(s_compiler *compiler, s_statement *statement) {
     } else if (token.value.symbol->startsUnderscore) { // Private property
 
     } else {
-      s_token next_token = preview(statement->scope);
+      s_token next_token = preview(parent->scope);
 
       if (next_token.type == ':') {
         // Variable definition
-        s_statement *sub_statement = compile_VariableDefinition(compiler, statement);
-        list_push(statement_body->statements, sub_statement);
-      } else if (next_token.type == '(') {
+        ret = compile_VariableDefinition(compiler, parent);
         // Function definition
         //compiler_FunctionDefinition(compiler, name_symbol);
       } else {
         // Expression (espresso ?)
-        s_statement *sub_statement = compile_Expression(compiler, statement);
-        list_push(statement_body->statements, sub_statement);
-        match(statement->scope, ';');
+        ret = compile_Expression(compiler, parent);
+        match(parent->scope, ';');
       }
     }
   } else {
     // Expression (espresso ?)
-    s_statement *sub_statement = compile_Expression(compiler, statement);
-    list_push(statement_body->statements, sub_statement);
-    match(statement->scope, ';');
+    ret = compile_Expression(compiler, parent);
+    match(parent->scope, ';');
   }
+
+  return ret;
 }
 
 
@@ -1091,6 +1131,49 @@ void __core_sub(s_stack__core_expression_item *stack) {}
 void __core_mul(s_stack__core_expression_item *stack) {}
 void __core_div(s_stack__core_expression_item *stack) {}
 
+void __core_inc(s_stack__core_expression_item *stack) {
+  core_expression_item a = stack_pop__core_expression_item(stack);
+  if (a.op->token->type != TOKEN_Symbol) PERROR("__core_inc", "Destination not valid");
+  s_symbol *dest_symbol = a.op->token->value.symbol;
+  s_symbolbody_variable *symbol_body = (s_symbolbody_variable *)dest_symbol->body;
+
+  bool isPrimary = symbol_body->value.type.isPrimary;
+
+  if (isPrimary) {
+    symbol_body->value.content = (int64_t)symbol_body->value.content + 1;
+  }
+
+  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, symbol_body->value));
+}
+
+void __core_cmp(s_stack__core_expression_item *stack) {
+  s_anyvalue b = stack_pop__core_expression_item(stack).value;
+  s_anyvalue a = stack_pop__core_expression_item(stack).value;
+  s_anyvalue r;
+
+  bool isPrimary = a.type.isPrimary && b.type.isPrimary;
+  if (isPrimary) {
+    if (a.type.type == b.type.type) {
+      int mainType = (int)a.type.type;
+      if ((mainType >= TYPE_Int8) && (mainType <= TYPE_Int64)) {
+        r = s_anyvalue_createPrimary(mainType, ((int64_t)a.content < (int64_t)b.content));
+      } else if ((mainType >= TYPE_UInt8) && (mainType <= TYPE_UInt64)) {
+        r = s_anyvalue_createPrimary(mainType, ((u_int64_t)a.content < (u_int64_t)b.content));
+      } else if (mainType == TYPE_Float32) {
+        //r = s_anyvalue_createPrimary(mainType, ((float)a.content + (float)b.content));
+      } else if (mainType == TYPE_Float64) {
+        //r = s_anyvalue_createPrimary(mainType, ((double)a.content + (double)b.content));
+      } else {
+        PERROR("__core_cmp", "Unsupported primary type casting");
+      }
+    }
+  } else {
+    PERROR("__core_cmp", "Unsupported operation");
+  }
+
+  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, r));
+}
+
 s_anyvalue __core_exe_expression(s_statement *statement) {
   s_stack__core_expression_item stack = stack_create__core_expression_item(50);
   stack.ptr = 0;
@@ -1147,8 +1230,8 @@ void __core_variable_def(s_statement *statement) {
 void __core_call_function(s_statement *statement) {}
 
 void __core_exe_statement(s_statement *statement) {
-  if (statement->type == STATEMENT) {
-    s_statementbody_statement *statement_body = (s_statementbody_statement *)statement->body;
+  if (statement->type == BLOCK) {
+    s_statementbody_block *statement_body = (s_statementbody_block *)statement->body;
 
     s_statement *sub_statement = list_read_first(statement_body->statements);
     do {
@@ -1158,6 +1241,19 @@ void __core_exe_statement(s_statement *statement) {
   } else {
     if (statement->exe_cb)
       statement->exe_cb(statement);
+  }
+}
+
+void __core_while(s_statement *statement) {
+  if (statement->type != WHILE) PERROR("__core_while", "Wrong statement type");
+
+  s_statementbody_while *statement_body = (s_statementbody_while *)statement->body;
+
+  s_anyvalue check_result = __core_exe_expression(statement_body->check);
+  
+  while (check_result.content) {
+    __core_exe_statement(statement_body->loop);
+    check_result = __core_exe_expression(statement_body->check);
   }
 }
 
