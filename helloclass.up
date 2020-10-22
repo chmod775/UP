@@ -1,11 +1,30 @@
-Actuator {
-	name : {String,Float};
-	value : Int;
+// StdLib
+Object {}
+
+Object.Clonable {
+	Clone() {
+
+	}
 }
 
-// Customized class, same as a children
-Motor : Actuator {
-	
+Object.HumanReadable {
+	ToString() {
+		return JSON(this).ToString();
+	}
+}
+
+Number : Object.HumanReadable, Object.Clonable {
+ 
+}
+
+Number.Integer {}
+Number.Float {}
+
+
+// Example code
+Actuator {
+	name : {String,Number};
+	value : Number;
 }
 
 // Children of Actuator
@@ -13,13 +32,13 @@ Actuator.Motor {
 	// Public
 	direction : Bool;
 	phases : [String] = ['L1', 'L2', 'L3']; // Array
-	currents: {String,Real} = { 'L1' = 0.0, 'L2' = 0.0 }; // Dictionary { KEY, VALUE }
+	currents: {String,Number.Float} = { 'L1' = 0.0, 'L2' = 0.0 }; // Dictionary { KEY, VALUE }
 
 	// Constant
-	MAX_PHASES : Int = 3;
+	MAX_PHASES : Number.Integer = 3;
 
 	// Method
-	getDirection(a : String, b : Int, c : Actuator) : Int {
+	GetDirection(a : String, b : Int, c : Actuator) : Int {
 
 	}
 
@@ -27,8 +46,21 @@ Actuator.Motor {
 	_temp : Int;
 }
 
+Actuator.Motor.Pump {
+	flow : Number;
+}
+
 m1 : Actuator.Motor;
 p1 : Actuator.Motor.Pump;
-cnt : Int;
+cnt : Number.Int;
 
 cnt++;
+
+// Automatic code generation
+Test {
+	: Actuator;
+	: Actuator.Motor.Pump;
+
+
+}
+

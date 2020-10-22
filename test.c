@@ -1,8 +1,15 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 void main() {
-  int i = 0;
-  while (i < 10)
-    int a = 0;
-  printf("%d", a);
+  int abc(int a, int b) {
+    return a + b;
+  }
+
+  u_int64_t i = 3;
+  while (i < 10000000)
+    i++;
+  printf("%d", i);
+
+  printf("%d", abc(5,6));
 }

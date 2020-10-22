@@ -1,6 +1,15 @@
 // Using basic types
-    m    :      Int       =5; // Hello
-r:Int = 0;
+    m    :      Number       =5; // Hello
+r:Number = 0;
+
+// p : r = 6; // :DDDDDDDDD
+
+Add() {
+    Sub() {
+        a : Number;
+    }
+    <4;
+}
 
 r = m + 3;
 r++;
@@ -11,25 +20,32 @@ r = r + 1;
 <r + (m + 8);
 <(m+m+m+m+m+m+m+m+m);
 
+Add() + 5;
+
+Sub();
+
 m = 775;
 
 <(m);
 <(r);
 
-s1:Int = 1;
-s2:Int = 2;
-s3:Int = s1 + s2;
+s1:Number = 1;
+s2:Number = 2;
+s3:Number = s1 + s2;
 
 <(s3);
 
-while (s3 < 10) {
-    s3++;
+while (s3 < 10000) {
+    s2 = 0;
+    while (s2 < 1000) s2++;
+    s3=s3 + s2;
 }
+
 
 <(s3);
 
 /*
-for (i : Int = 0; i < 10; i++) {
+for (i : Number = 0; i < 10; i++) {
     <i;
 }
 */

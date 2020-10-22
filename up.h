@@ -6,8 +6,6 @@
 #ifndef UP
 #define UP
 
-#define PERROR(A, B, ...) printf("[" A "] Error! - " B "\n", ##__VA_ARGS__);
-
 /* ##### Helpers shit ##### */
 FILE *openFile(char *filename);
 
@@ -91,67 +89,23 @@ T stack_pop__##T(s_stack__##T *s) { \
   return s->content[s->ptr]; \
 } \
 
-/* ##### Symbols ##### */
 typedef enum {
-  NOTDEFINED,
-  KEYWORD,
-  PRIMARYTYPE,
-  VARIABLE,
-  FUNCTION,
-  CLASS
-} e_symboltype;
+  TOKEN_Symbol = 128, TOKEN_Var,
 
-typedef struct {
-  int hash;
-  char *name;
-  int length;
+  TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
 
-  bool isUppercase;
-  bool isFullcase;
-  bool startsUnderscore;
+  TOKEN_CommentBlock_End,
 
-  e_symboltype type;
-  void *body;
-} s_symbol;
-
-char *symbol_GetCleanName(s_symbol *symbol);
-
-/* ##### Scope ##### */
-typedef struct _s_scope {
-  struct _s_scope *parent;
-  s_parlist *symbols;
-} s_scope;
-
-s_scope *scope_Create(s_scope *parent);
-s_scope *scope_CreateAsRoot();
+  TOKEN_Else, TOKEN_Enum, TOKEN_If, TOKEN_Return, TOKEN_Sizeof, TOKEN_While, TOKEN_For, TOKEN_Switch,
+  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
+} e_token;
 
 /* ##### Types ##### */
-typedef enum {
-  TYPE_Int8 = 0x10,
-  TYPE_Int16,
-  TYPE_Int32,
-  TYPE_Int64,
-
-  TYPE_UInt8 = 0x20,
-  TYPE_UInt16,
-  TYPE_UInt32,
-  TYPE_UInt64,
-
-  TYPE_Float32 = 0x40,
-  TYPE_Float64
-} e_primary_types;
-
 typedef struct {
-  e_primary_types type;
-} s_symbolbody_primarytype;
-
-typedef struct {
-  bool isPrimary;
+  bool isClass;
   bool isDictionary;
   bool isList;
-  bool isClass;
   // In case of:
-  //  Primary: type = e_primary_types
   //  Dictionary: *type = s_anytype
   //  List: *type = s_anytype
   //  Class: *type = s_symbol
@@ -164,7 +118,7 @@ typedef struct {
 } s_anyvalue;
 
 typedef struct {
-  int key;
+  s_anytype *key;
   s_anytype *value;
 } s_dictionarytype;
 
@@ -174,7 +128,122 @@ typedef struct {
 
 s_anyvalue s_anyvalue_createPrimary(int type, void *value);
 
-s_symbol *symbol_CreateFromPrimaryType(char *keyword, e_primary_types type);
+
+/* ##### Scope ##### */
+typedef struct _s_scope {
+  struct _s_scope *parent;
+  s_parlist *symbols;
+} s_scope;
+
+/* ##### STATEMENT ##### */
+typedef enum {
+  STATEMENT_BLOCK,
+  STATEMENT_IF,
+  STATEMENT_FOR,
+  STATEMENT_WHILE,
+  STATEMENT_RETURN,
+  STATEMENT_FIELD_DEF,
+  STATEMENT_METHOD_DEF,
+  STATEMENT_CLASS_DEF,
+  STATEMENT_EXPRESSION
+} e_statementtype;
+
+typedef struct {
+  s_list *statements; // <s_statement>
+} s_statementbody_block;
+
+typedef struct _s_statement s_statement;
+typedef struct _s_symbol s_symbol;
+
+typedef struct {
+  s_statement *init;
+  s_statement *check;
+  s_statement *step;
+} s_statementbody_for;
+
+typedef struct {
+  s_statement *check;
+  s_statement *loop;
+} s_statementbody_while;
+
+typedef struct {
+  s_symbol *symbol;
+} s_statementbody_field_def;
+
+typedef struct {
+  s_list *core_operations; // <s_expression_operation>
+} s_statementbody_expression;
+
+typedef union {
+  s_statementbody_block *block;
+  s_statementbody_for *_for;
+  s_statementbody_while *_while;
+  s_statementbody_field_def *field_def;
+  s_statementbody_expression *expression;
+} u_statementbody;
+
+typedef struct _s_statement {
+  struct _s_statement *parent;
+  s_scope *scope;
+  u_statementbody body;
+  e_statementtype type;
+  void (*exe_cb)(struct _s_statement *);
+} s_statement;
+
+/* ##### Symbols ##### */
+typedef enum {
+  SYMBOL_NOTDEFINED,
+  SYMBOL_KEYWORD,
+  SYMBOL_FIELD,
+  SYMBOL_METHOD,
+  SYMBOL_CLASS
+} e_symboltype;
+
+typedef struct {
+  e_token token;
+} s_symbolbody_keyword;
+
+typedef struct {
+  s_anyvalue *value; // Actual values are stored in the instance
+  s_statement *init_expression;
+} s_symbolbody_field;
+
+typedef struct {
+  s_anytype ret_type;
+  s_list *arguments; // <s_symbol>
+  s_statement *body;
+} s_symbolbody_method;
+
+typedef struct {
+  s_list *fields; // <s_symbol<field>>
+  s_list *methods; // <s_symbol<method>>
+} s_symbolbody_class;
+
+typedef union {
+  s_symbolbody_keyword *keyword;
+  s_symbolbody_field *field;
+  s_symbolbody_method *method;
+  s_symbolbody_class *class;
+} u_symbolbody;
+
+typedef struct _s_symbol {
+  int hash;
+  char *name;
+  int length;
+
+  bool isUppercase;
+  bool isFullcase;
+  bool startsUnderscore;
+
+  e_symboltype type;
+  u_symbolbody body;
+} s_symbol;
+
+char *symbol_GetCleanName(s_symbol *symbol);
+
+
+s_scope *scope_Create(s_scope *parent);
+s_scope *scope_CreateAsRoot();
 
 /* ##### Parser ##### */
 typedef union {
@@ -183,11 +252,11 @@ typedef union {
   char *string;
   s_symbol *symbol;
   void *any;
-} u_token_value;
+} u_token_content;
 
 typedef struct {
   int type;
-  u_token_value value;
+  u_token_content content;
 } s_token;
 
 typedef struct {
@@ -197,26 +266,7 @@ typedef struct {
   s_token token;
 } s_parser;
 
-typedef enum {
-  TOKEN_Symbol = 128, TOKEN_Var,
-
-  TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
-
-  TOKEN_Char, TOKEN_Short, TOKEN_Int, TOKEN_Long, TOKEN_Float, TOKEN_Double, TOKEN_String, TOKEN_Bool, TOKEN_Unsigned,
-
-  TOKEN_CommentBlock_End,
-
-  TOKEN_Else, TOKEN_Enum, TOKEN_If, TOKEN_Return, TOKEN_Sizeof, TOKEN_While, TOKEN_For, TOKEN_Switch,
-  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
-} e_token;
-
-typedef struct {
-  e_token token;
-} s_symbolbody_keyword;
-
 s_parser *parse_Init(char *str);
-
-bool parse_IsTokenBasicType(s_token token);
 
 int parse_Next(s_scope *scope, s_parser *parser);
 
@@ -227,30 +277,7 @@ int parse_Match(s_scope *scope, s_parser *parser, int token);
 s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
 
 
-/* ##### STATEMENT ##### */
-typedef enum {
-  BLOCK,
-  IF,
-  FOR,
-  WHILE,
-  RETURN,
-  VARIABLE_DEF,
-  FUNCTION_DEF,
-  CLASS_DEF,
-  EXPRESSION
-} e_statementtype;
 
-typedef struct {
-  s_list *statements;
-} s_statementbody_block;
-
-typedef struct _s_statement {
-  struct _s_statement *parent;
-  s_scope *scope;
-  void *body;
-  e_statementtype type;
-  void (*exe_cb)(struct _s_statement *);
-} s_statement;
 
 
 /* ##### Compiler ##### */
@@ -271,60 +298,35 @@ s_statement *statement_CreateBlock(s_compiler *compiler, s_statement *parent);
 s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 
 /* ##### For STATEMENT ##### */
-typedef struct {
-  s_statement *init;
-  s_statement *check;
-  s_statement *step;
-} s_statementbody_for;
+
 
 /* ##### While STATEMENT ##### */
-typedef struct {
-  s_statement *check;
-  s_statement *loop;
-} s_statementbody_while;
+
 
 /* ##### Expression ##### */
 typedef struct {
   s_token *token;
 } s_expression_operation;
 
-typedef struct {
-  s_list *core_operations;
-} s_statementbody_expression;
-
 s_expression_operation *expression_Emit(s_list *core_operations, s_token token);
 void expression_Step(s_compiler *compiler, s_statement *statement, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
-/* ##### VARIABLE ##### */
-typedef struct {
-  s_anyvalue value;
-  s_statement *init_expression;
-} s_symbolbody_variable;
-
-typedef struct {
-  s_symbol *symbol;
-} s_statementbody_variable;
-
+/* ##### FIELD ##### */
 s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement);
 s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *parent);
 
-/* ##### FUNCTION ##### */
+/* ##### METHOD ##### */
 typedef struct {
   s_symbol *symbol;
-} s_function_argument;
+} s_method_argument;
 
-typedef struct {
-  s_anytype ret_type;
-  s_list *arguments;
-} s_symbolbody_function;
-
-void compile_FunctionDefinition(s_compiler *compiler, s_symbol *name);
+void compile_FunctionDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### CLASS ##### */
-typedef struct {
-  void *TODO;
-} s_symbolbody_class;
+void class_AddField(s_symbolbody_class *body, s_symbol *field);
+void class_AddMethod(s_symbolbody_class *body, s_symbol *field);
+
 void compile_ClassDefinition(s_compiler *compiler);
 
 
@@ -340,7 +342,7 @@ define_stack(core_expression_item)
 
 typedef struct {
   s_anyvalue content[32];
-} __core_function_arguments;
+} __core_method_arguments;
 
 /* ##### CORE libs ##### */
 s_anyvalue __core_exe_expression(s_statement *statement);
@@ -361,13 +363,25 @@ void __core_dec(s_stack__core_expression_item *stack);
 void __core_cmp(s_stack__core_expression_item *stack);
 
 void __core_expression(s_statement *statement);
-void __core_variable_def(s_statement *statement);
-void __core_call_function(s_statement *statement);
+void __core_field_def(s_statement *statement);
+void __core_call_method(s_statement *statement);
 
 void __core_exe_statement(s_statement *statement);
 
 void __core_while(s_statement *statement);
 
 void __core_new_class_instance();
+
+// Symbols actions
+void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
+s_anyvalue __core_symbol_get_value(s_symbol *symbol);
+
+void __core_symbol_call(s_symbol *symbol, s_list *arguments);
+
+
+
+// Class actions
+s_symbol *__core_class_get_method(s_symbol *class, char *methodName);
+s_symbol *__core_class_get_field(s_symbol *class, char *fieldName);
 
 #endif
