@@ -1,0 +1,71 @@
+a : Number = NULL;        // (Empty) Pointer to Number class
+a : Number = 6;           // Fast constructor, like calling Number(6)
+a : Number = Number(1,6); // Normal constructor calling
+
+a = 7;                    // Calling method "Assign" in class "Number"
+
+a = Number(5);            // Calling method "Assign" in class "Number". If class Number given, clone object (implemented in Number definition. super method copy pointer only)
+
+b : Number = a;           // Like "a : Number = 6;"
+
+c : Number = NULL;
+
+c = a;                    // Cloning. Like example "a = Number(5);"
+
+c = a.Clone();            // CLONING. Done in class definition using overwritable method (super method just copy memory using memcpy)
+
+// Inheritance method A
+ParentA {
+
+}
+
+ParentA.Children {
+
+}
+
+ParentA.Children.Brother {
+
+}
+
+tA : Parent.Children.Brother = NULL;
+
+// Inheritance method B
+ParentB {
+  Children {
+    Brother {
+
+    }
+  }
+}
+
+tB : ParentB.Children.Brother = NULL;
+
+// Derivation example 1
+ClassA {
+
+}
+
+ClassB {
+
+}
+
+MixClass : ClassA, ClassB {
+
+}
+
+t1 : MixClass = NULL;
+
+// Derivation example 2 (Inheritance but with single name)
+Parent2 {
+
+}
+
+Children : Parent2 {
+
+}
+
+Brother : Children {
+
+}
+
+t1 : Brother = NULL;

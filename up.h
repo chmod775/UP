@@ -136,6 +136,9 @@ typedef struct _s_scope {
 } s_scope;
 
 /* ##### STATEMENT ##### */
+typedef struct _s_statement s_statement;
+typedef struct _s_symbol s_symbol;
+
 typedef enum {
   STATEMENT_BLOCK,
   STATEMENT_IF,
@@ -151,9 +154,6 @@ typedef enum {
 typedef struct {
   s_list *statements; // <s_statement>
 } s_statementbody_block;
-
-typedef struct _s_statement s_statement;
-typedef struct _s_symbol s_symbol;
 
 typedef struct {
   s_statement *init;
@@ -171,6 +171,14 @@ typedef struct {
 } s_statementbody_field_def;
 
 typedef struct {
+  s_symbol *symbol;
+} s_statementbody_method_def;
+
+typedef struct {
+  s_symbol *symbol;
+} s_statementbody_class_def;
+
+typedef struct {
   s_list *core_operations; // <s_expression_operation>
 } s_statementbody_expression;
 
@@ -179,6 +187,8 @@ typedef union {
   s_statementbody_for *_for;
   s_statementbody_while *_while;
   s_statementbody_field_def *field_def;
+  s_statementbody_method_def *method_def;
+  s_statementbody_class_def *class_def;
   s_statementbody_expression *expression;
 } u_statementbody;
 
@@ -204,7 +214,7 @@ typedef struct {
 } s_symbolbody_keyword;
 
 typedef struct {
-  s_anyvalue *value; // Actual values are stored in the instance
+  s_anyvalue value; // Actual values are stored in the instance
   s_statement *init_expression;
 } s_symbolbody_field;
 
@@ -215,6 +225,8 @@ typedef struct {
 } s_symbolbody_method;
 
 typedef struct {
+  s_scope *scope;
+  s_symbol *parent;
   s_list *fields; // <s_symbol<field>>
   s_list *methods; // <s_symbol<method>>
 } s_symbolbody_class;
@@ -313,21 +325,26 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
 /* ##### FIELD ##### */
-s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement);
-s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *parent);
+s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement);
+s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### METHOD ##### */
 typedef struct {
   s_symbol *symbol;
 } s_method_argument;
 
-void compile_FunctionDefinition(s_compiler *compiler, s_statement *parent);
+s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### CLASS ##### */
+typedef struct {
+  s_symbol *class;
+  s_list *data; // <void *>
+} s_class_instance;
+
 void class_AddField(s_symbolbody_class *body, s_symbol *field);
 void class_AddMethod(s_symbolbody_class *body, s_symbol *field);
 
-void compile_ClassDefinition(s_compiler *compiler);
+s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 
 
 /* ##### CORE structs ##### */

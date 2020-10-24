@@ -714,7 +714,7 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
   } else if (token.type == TOKEN_Symbol) {
     s_token next_token = preview(statement->scope);
 
-    if (next_token.type == '(') { // Function call
+    if (next_token.type == '(') { // Method call
       match(statement->scope, TOKEN_Symbol);
       match(statement->scope, '(');
       // Call arguments
@@ -780,38 +780,48 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
-/*
-void compiler_ClassDefinition(s_compiler *compiler) {
-  s_symbol *class_symbol = token.symbol;
+
+s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) {
+  if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compiler_ClassDefinition", "Wrong statement for class definition.");
+
+  s_symbol *class_symbol = token.content.symbol;
   s_symbol *parent_symbol = NULL;
 
-  match(Id);
+  match(parent->scope, TOKEN_Symbol);
 
   if (token.type == ':') { // Has parent
-    match(':');
+    match(parent->scope, ':');
 
-    parent_symbol = token.symbol;
+    parent_symbol = token.content.symbol;
 
-    match(Id);
+    match(parent->scope, TOKEN_Symbol);
   }
 
   if (token.type == '.') { // Is children
-    match('.');
+    match(parent->scope, '.');
 
     parent_symbol = class_symbol;
-    class_symbol = token.symbol;
+    class_symbol = token.content.symbol;
 
-    match(Id);
+    match(parent->scope, TOKEN_Symbol);
   }
 
-  compiler_Statement(compiler);
+  s_statement *ret = statement_Create(compiler, parent, STATEMENT_CLASS_DEF);
+  ret->body.class_def->symbol = class_symbol;
+  
+  return ret;
 }
-*/
 
-void compile_FunctionDefinition(s_compiler *compiler, s_statement *parent) {
-  // name([arg0, arg1, ...]) [: <return type>] { <statements> }
+// name([arg0, arg1, ...]) [: <return type>] { <statements> }
+s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent) {
+  if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong statement for method definition.");
+  if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compile_MethodDefinition", "Wrong parent symbol.");
+
   s_symbol *name = token.content.symbol;
-  if (!name->isUppercase) CERROR(compiler, "compile_FunctionDefinition", "Function definition must start uppercase.");
+  if (!name->isUppercase) CERROR(compiler, "compile_MethodDefinition", "Method definition must start uppercase.");
+
+  s_statement *ret = statement_Create(compiler, parent, STATEMENT_METHOD_DEF);
+  ret->body.method_def->symbol = name;
 
   match(parent->scope, TOKEN_Symbol);
 
@@ -828,11 +838,11 @@ void compile_FunctionDefinition(s_compiler *compiler, s_statement *parent) {
 
   if (token.type == ':') {
     // Return type
-    s_anytype *type = compile_VariableType(compiler, parent);
+    s_anytype *type = compile_FieldType(compiler, parent);
     name->body.method->ret_type = *type;
   }
 
-  // Get statement for method
+  // Get body statement for method
   s_statement *ret_statement = statement_CreateBlock(compiler, parent);
   name->body.method->body = ret_statement;
 
@@ -844,9 +854,13 @@ void compile_FunctionDefinition(s_compiler *compiler, s_statement *parent) {
   }
 
   match(parent->scope, '}');
+
+  list_push(parent->body.class_def->symbol->body.class->fields, name);
+
+  return ret;
 }
 
-s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
+s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
   s_anytype *ret = NEW(s_anytype);
 
   ret->isDictionary = false;
@@ -857,7 +871,7 @@ s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
   if (token.type == TOKEN_Symbol) {
     // Class
     s_symbol *symbol = token.content.symbol;
-    if (!symbol->isUppercase) CERROR(compiler, "compile_VariableType", "Symbol is not a class");
+    if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
 
     ret->isClass = true;
     ret->type = symbol;
@@ -868,7 +882,7 @@ s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
     match(statement->scope, '[');
 
     s_listtype *ltype = NEW(s_listtype);
-    ltype->items = compile_VariableType(compiler, statement);
+    ltype->items = compile_FieldType(compiler, statement);
 
     ret->isList = true;
     ret->type = ltype;
@@ -880,30 +894,30 @@ s_anytype *compile_VariableType(s_compiler *compiler, s_statement *statement) {
 
     s_dictionarytype *dtype = NEW(s_dictionarytype);
 
-    dtype->key = compile_VariableType(compiler, statement);
+    dtype->key = compile_FieldType(compiler, statement);
 
     if (!dtype->key->isClass) {
-      CERROR(compiler, "compile_VariableType", "Dictionary key can only be of primary type");
+      CERROR(compiler, "compile_FieldType", "Dictionary key can only be of primary type");
       exit(-1);
     }
 
     match(statement->scope, ',');
 
-    dtype->value = compile_VariableType(compiler, statement);
+    dtype->value = compile_FieldType(compiler, statement);
 
     ret->isDictionary = true;
     ret->type = dtype;
 
     match(statement->scope, '}');
   } else {
-    CERROR(compiler, "compile_VariableType", "Unsupported complex field definition");
+    CERROR(compiler, "compile_FieldType", "Unsupported complex field definition");
     exit(-1);
   }
 
   return ret;
 }
 
-s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *parent) {
+s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) {
   s_statement *ret = statement_Create(compiler, parent, STATEMENT_FIELD_DEF);
   ret->exe_cb = &__core_field_def;
 
@@ -918,15 +932,15 @@ s_statement *compile_VariableDefinition(s_compiler *compiler, s_statement *paren
   name->body.field = NEW(s_symbolbody_field);
   name->type = SYMBOL_FIELD;
 
-  s_anytype *type = compile_VariableType(compiler, ret);
+  s_anytype *type = compile_FieldType(compiler, ret);
   name->body.field->value.type = *type;
   name->body.field->init_expression = NULL;
 
-  if (token.type == TOKEN_Assign) {
-    match(ret->scope, TOKEN_Assign);
+  if (token.type != TOKEN_Assign) CERROR(compiler, "compile_FieldDefinition", "Field must have an initiliazation value.");
 
-    name->body.field->init_expression = compile_Expression(compiler, ret);
-  }
+  match(ret->scope, TOKEN_Assign);
+
+  name->body.field->init_expression = compile_Expression(compiler, ret);
 
   match(ret->scope, ';');
 
@@ -968,7 +982,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   // 4. { <statement> }
   // 5. return xxx;
   // 6. <empty statement>;
-  // 7. field : type [ = <expression>];
+  // 7. field : type = <expression>;
   // 8. method(...) : type { <statement> }
   // 9. class { <statement> }
   // 9. expression; (expression end with semicolon)
@@ -999,14 +1013,20 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     // Empty statement
     match(parent->scope, ';');
   } else if (token.type == TOKEN_Symbol) {
-    if (token.content.symbol->isUppercase) { // Function or Class
+    if (token.content.symbol->isUppercase) { // Method or Class
       if (token.content.symbol->type == SYMBOL_METHOD) {
         // Expression (espresso ?)
         ret = compile_Expression(compiler, parent);
         match(parent->scope, ';');
       } else {
-        // Function definition
-        compile_FunctionDefinition(compiler, parent);
+        s_token next_token = preview(parent->scope);
+        if (next_token.type == '(') {
+          // Method definition
+          compile_MethodDefinition(compiler, parent);
+        } else {
+          // Class definition
+          compile_ClassDefinition(compiler, parent);
+        }
       }
 
       //compiler_ClassDefinition(compiler);
@@ -1018,8 +1038,8 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
       s_token next_token = preview(parent->scope);
 
       if (next_token.type == ':') {
-        // Variable definition
-        ret = compile_VariableDefinition(compiler, parent);
+        // Field definition
+        ret = compile_FieldDefinition(compiler, parent);
       } else {
         // Expression (espresso ?)
         ret = compile_Expression(compiler, parent);

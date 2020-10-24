@@ -4,9 +4,13 @@ r:Number = 0;
 
 // p : r = 6; // :DDDDDDDDD
 
+Test {
+    
+}
+
 Add() {
     Sub() {
-        a : Number;
+        a : Number = 0;
     }
     <4;
 }
