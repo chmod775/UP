@@ -90,7 +90,7 @@ T stack_pop__##T(s_stack__##T *s) { \
 } \
 
 typedef enum {
-  TOKEN_Symbol = 128, TOKEN_Var,
+  TOKEN_Symbol = 128, TOKEN_Debug,
 
   TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
 
@@ -192,13 +192,13 @@ typedef union {
   s_statementbody_expression *expression;
 } u_statementbody;
 
-typedef struct _s_statement {
+struct _s_statement {
   struct _s_statement *parent;
   s_scope *scope;
   u_statementbody body;
   e_statementtype type;
   void (*exe_cb)(struct _s_statement *);
-} s_statement;
+};
 
 /* ##### Symbols ##### */
 typedef enum {
@@ -252,10 +252,14 @@ typedef struct _s_symbol {
 } s_symbol;
 
 char *symbol_GetCleanName(s_symbol *symbol);
+s_symbol *symbol_Create(char *name, e_symboltype type, int length);
+s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
 
-
+/* ##### Scope ##### */
 s_scope *scope_Create(s_scope *parent);
 s_scope *scope_CreateAsRoot();
+
+char *scope_Print(s_scope *scope);
 
 /* ##### Parser ##### */
 typedef union {
@@ -286,11 +290,6 @@ s_token parse_Preview(s_scope *scope, s_parser *parser);
 
 int parse_Match(s_scope *scope, s_parser *parser, int token);
 
-s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
-
-
-
-
 
 /* ##### Compiler ##### */
 typedef struct {
@@ -304,8 +303,9 @@ void compiler_Next(s_compiler *compiler);
 
 
 /* ##### STATEMENT ##### */
-s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_statementtype type);
-s_statement *statement_CreateBlock(s_compiler *compiler, s_statement *parent);
+s_statement *statement_Create(s_statement *parent, e_statementtype type);
+s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type);
+s_statement *statement_CreateBlock(s_statement *parent);
 
 s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 
@@ -344,8 +344,8 @@ typedef struct {
 void class_AddField(s_symbolbody_class *body, s_symbol *field);
 void class_AddMethod(s_symbolbody_class *body, s_symbol *field);
 
+void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
-
 
 /* ##### CORE structs ##### */
 typedef struct {

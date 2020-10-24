@@ -260,20 +260,26 @@ char *symbol_GetCleanName(s_symbol *symbol) {
   return ret;
 }
 
-s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
+s_symbol *symbol_Create(char *name, e_symboltype type, int length) {
   s_symbol *ret = NEW(s_symbol);
 
-  ret->hash = hashOfSymbol(keyword);
-  ret->name = keyword;
-  ret->length = strlen(keyword);
-  ret->type = SYMBOL_KEYWORD;
+  ret->hash = hashOfSymbol(name);
+  ret->name = name;
+  ret->length = (length > -1) ? length : strlen(name);
+  ret->type = type;
+
+  ret->isUppercase = isUppercase_String(name);
+  ret->isFullcase = isFullcase_String(name);
+  ret->startsUnderscore = startsUnderscore_String(name);
+
+  return ret;
+}
+
+s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
+  s_symbol *ret = symbol_Create(keyword, SYMBOL_KEYWORD, -1);
 
   ret->body.keyword = NEW(s_symbolbody_keyword);
   ret->body.keyword->token = token;
-
-  ret->isUppercase = isUppercase_String(keyword);
-  ret->isFullcase = isFullcase_String(keyword);
-  ret->startsUnderscore = startsUnderscore_String(keyword);
 
   return ret;
 }
@@ -294,6 +300,7 @@ s_scope *scope_CreateAsRoot() {
   s_scope *ret = scope_Create(NULL);
 
   // Init symbols with base keywords
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("else", TOKEN_Else));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("enum", TOKEN_Enum));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("if", TOKEN_If));
@@ -304,6 +311,21 @@ s_scope *scope_CreateAsRoot() {
   parlist_push(ret->symbols, symbol_CreateFromKeyword("switch", TOKEN_Switch));
 
   return ret;
+}
+
+char buffer[1000];
+
+char *scope_Print(s_scope *scope) {
+  char *buffer_ptr = buffer;
+
+  s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
+  while (symbol_ptr != NULL) {
+    int len = sprintf(buffer_ptr, "Symbol: %s - %d", symbol_GetCleanName(symbol_ptr), symbol_ptr->type);
+    buffer_ptr += len + 1;
+    symbol_ptr = (s_symbol *)parlist_read_next(scope->symbols);
+  }
+
+  return buffer;
 }
 
 /* ##### Parser ##### */
@@ -356,7 +378,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
 
       while (symbol_ptr != NULL) {
-        if (symbol_ptr->hash) {
+        if (symbol_ptr->hash == hash) {
           if (!memcmp(symbol_ptr->name, last_pos, symbol_ptr->length)) {
             if (symbol_ptr->type == SYMBOL_KEYWORD) {
               ret(symbol_ptr->body.keyword->token, NULL, any);
@@ -369,16 +391,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       }
 
       // No symbol found, create one
-      s_symbol *new_symbol = NEW(s_symbol);
-
-      new_symbol->hash = hash;
-      new_symbol->name = last_pos;
-      new_symbol->length = src - last_pos;
-      
-      new_symbol->isUppercase = isUppercase_String(last_pos);
-      new_symbol->isFullcase = isFullcase_String(last_pos);
-      new_symbol->startsUnderscore = startsUnderscore_String(last_pos);
-      
+      s_symbol *new_symbol = symbol_Create(last_pos, SYMBOL_NOTDEFINED, src - last_pos);
       parlist_push(scope->symbols, new_symbol);
 
       ret(TOKEN_Symbol, new_symbol, symbol);
@@ -573,6 +586,10 @@ int parse_Match(s_scope *scope, s_parser *parser, int token) {
       printf("Line %d: expected token: %d\n", parser->line, token);
     exit(-1);
   }
+  if (parser->token.type == TOKEN_Debug) {
+    int a = 0;
+    while (a);
+  }
 }
 
 s_token parse_Preview(s_scope *scope, s_parser *parser) {
@@ -582,7 +599,7 @@ s_token parse_Preview(s_scope *scope, s_parser *parser) {
 }
 
 /* ##### STATEMENT ##### */
-s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_statementtype type) {
+s_statement *statement_Create(s_statement *parent, e_statementtype type) {
   s_statement *ret = NEW(s_statement);
 
   ret->parent = parent->parent;
@@ -593,23 +610,48 @@ s_statement *statement_Create(s_compiler *compiler, s_statement *parent, e_state
   return ret;
 }
 
-s_statement *statement_CreateBlock(s_compiler *compiler, s_statement *parent) {
+s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type) {
   s_statement *ret = NEW(s_statement);
 
-  if (parent == NULL) { // Root statement
-    ret->parent = NULL;
-    ret->scope = compiler->rootScope;
-  } else {
-    ret->parent = parent;
-    ret->scope = scope_Create(parent->scope);
-  }
+  ret->parent = parent;
+  ret->scope = scope_Create(parent->scope);
 
-  ret->type = STATEMENT_BLOCK;
+  ret->type = type;
+
+  return ret;
+}
+
+
+s_statement *statement_CreateBlock(s_statement *parent) {
+  s_statement *ret = statement_CreateChildren(parent, STATEMENT_BLOCK);
   
   ret->exe_cb = &__core_exe_statement;
 
   ret->body.block = NEW(s_statementbody_block);
   ret->body.block->statements = list_create();
+
+  return ret;
+}
+
+s_statement *statement_CreateRoot(s_compiler *compiler) {
+  // Create a class Statement named "Program"
+  s_statement *ret = NEW(s_statement);
+
+  ret->type = STATEMENT_CLASS_DEF;
+  ret->parent = NULL;
+  ret->scope = compiler->rootScope;
+  ret->exe_cb = NULL;
+
+  s_symbol *symbol = symbol_Create("Program", SYMBOL_CLASS, -1);
+
+  ret->body.class_def = NEW(s_statementbody_class_def);
+  ret->body.class_def->symbol = symbol;
+
+  symbol->body.class = NEW(s_symbolbody_class);
+  symbol->body.class->parent = NULL;
+  symbol->body.class->scope = compiler->rootScope;
+  symbol->body.class->fields = list_create();
+  symbol->body.class->methods = list_create();
 
   return ret;
 }
@@ -621,15 +663,11 @@ s_compiler *compiler_Init(char *content) {
   ret->rootScope = scope_CreateAsRoot();
   if (!ret->rootScope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
-  ret->rootStatement = statement_CreateBlock(ret, NULL);
-  if (!ret->rootStatement) { PERROR("compiler_Init", "Could not malloc root statement"); return NULL; }
-
-  ret->rootStatement->body.block = NEW(s_statementbody_block);
-  if (!ret->rootStatement->body.block) { PERROR("compiler_Init", "Could not malloc statement body"); return NULL; }
-
-  ret->rootStatement->body.block->statements = list_create();
+  ret->rootStatement = statement_CreateRoot(ret);
+  if (!ret->rootStatement) { PERROR("compiler_Init", "Could not create root class statement"); return NULL; }
 
   ret->parser = parse_Init(content);
+  if (!ret->parser) { PERROR("compiler_Init", "Could not initialize root parser"); return NULL; }
 
   return ret;
 }
@@ -659,12 +697,7 @@ s_compiler *compiler_InitFromFile(char *filename) {
 void compiler_Execute(s_compiler *compiler) {
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
-  s_statementbody_block *sub_statement_body = compiler->rootStatement->body.block;
-  
-  while (compiler->parser->token.type > 0) {
-    s_statement *statement = compile_Statement(compiler, compiler->rootStatement);
-    list_push(sub_statement_body->statements, statement);
-  }
+  compile_ClassBody(compiler, compiler->rootStatement);
 
   //__core_exe_statement(compiler->rootStatement);
 }
@@ -768,7 +801,7 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
 }
 
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(compiler, parent, STATEMENT_EXPRESSION);
+  s_statement *ret = statement_Create(parent, STATEMENT_EXPRESSION);
 
   ret->exe_cb = &__core_expression;
 
@@ -781,46 +814,74 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
 }
 
 
+void compile_ClassBody(s_compiler *compiler, s_statement *class) {
+  s_statementbody_class_def *class_body = class->body.class_def;
+
+  while ((token.type > 0) && (token.type != '}') ) {
+    s_statement *statement = compile_Statement(compiler, class);
+    if (statement != NULL) { // If not empty statement
+      if (statement->type == STATEMENT_FIELD_DEF) {
+        list_push(class_body->symbol->body.class->fields, statement->body.field_def->symbol);
+      } else if (statement->type == STATEMENT_METHOD_DEF) {
+        list_push(class_body->symbol->body.class->methods, statement->body.method_def->symbol);
+      } else if (statement->type == STATEMENT_CLASS_DEF) {
+        // Do nothing
+      } else {
+        CERROR(compiler, "compile_ClassBody", "Statement not allowed in class definition.");
+      }
+    }
+  }
+}
+
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) {
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compiler_ClassDefinition", "Wrong statement for class definition.");
+  if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compiler_ClassDefinition", "Wrong parent symbol.");
 
   s_symbol *class_symbol = token.content.symbol;
-  s_symbol *parent_symbol = NULL;
+  s_symbol *parent_symbol = parent->body.class_def->symbol; // Direct Inheritance
 
   match(parent->scope, TOKEN_Symbol);
 
-  if (token.type == ':') { // Has parent
+  if (token.type == ':') { // Derivation (multiple classes allowed)
+    // MixClass : ClassA, ClassB, ClassC, ... {}
     match(parent->scope, ':');
-
-    parent_symbol = token.content.symbol;
-
-    match(parent->scope, TOKEN_Symbol);
   }
 
-  if (token.type == '.') { // Is children
+  if (token.type == '.') { // External Inheritance
+    // ClassA.ClassB...ClassC.Children {}
     match(parent->scope, '.');
-
-    parent_symbol = class_symbol;
-    class_symbol = token.content.symbol;
-
-    match(parent->scope, TOKEN_Symbol);
   }
 
-  s_statement *ret = statement_Create(compiler, parent, STATEMENT_CLASS_DEF);
+  class_symbol->type = SYMBOL_CLASS;
+  class_symbol->body.class = NEW(s_symbolbody_class);
+  class_symbol->body.class->parent = parent_symbol;
+  class_symbol->body.class->scope = parent->scope;
+  class_symbol->body.class->fields = list_create();
+  class_symbol->body.class->methods = list_create();
+
+  s_statement *ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF);
+  ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_symbol;
-  
+
+  match(ret->scope, '{');
+
+  compile_ClassBody(compiler, ret);
+
+  match(parent->scope, '}');
+
   return ret;
 }
 
 // name([arg0, arg1, ...]) [: <return type>] { <statements> }
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent) {
-  if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong statement for method definition.");
+  if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong parent statement for method definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compile_MethodDefinition", "Wrong parent symbol.");
 
   s_symbol *name = token.content.symbol;
   if (!name->isUppercase) CERROR(compiler, "compile_MethodDefinition", "Method definition must start uppercase.");
 
-  s_statement *ret = statement_Create(compiler, parent, STATEMENT_METHOD_DEF);
+  s_statement *ret = statement_Create(parent, STATEMENT_METHOD_DEF);
+  ret->body.method_def = NEW(s_statementbody_method_def);
   ret->body.method_def->symbol = name;
 
   match(parent->scope, TOKEN_Symbol);
@@ -843,7 +904,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   }
 
   // Get body statement for method
-  s_statement *ret_statement = statement_CreateBlock(compiler, parent);
+  s_statement *ret_statement = statement_CreateBlock(parent);
   name->body.method->body = ret_statement;
 
   match(parent->scope, '{');
@@ -872,6 +933,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     // Class
     s_symbol *symbol = token.content.symbol;
     if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
+    if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
     ret->isClass = true;
     ret->type = symbol;
@@ -918,7 +980,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
 }
 
 s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(compiler, parent, STATEMENT_FIELD_DEF);
+  s_statement *ret = statement_Create(parent, STATEMENT_FIELD_DEF);
   ret->exe_cb = &__core_field_def;
 
   s_symbol *name = token.content.symbol;
@@ -948,7 +1010,7 @@ s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) 
 }
 
 s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(compiler, parent, STATEMENT_FOR);
+  s_statement *ret = statement_Create(parent, STATEMENT_FOR);
 
   ret->body._for = NEW(s_statementbody_for);
 
@@ -961,7 +1023,7 @@ s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
 }
 
 s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(compiler, parent, STATEMENT_WHILE);
+  s_statement *ret = statement_Create(parent, STATEMENT_WHILE);
   ret->exe_cb = &__core_while;
 
   match(ret->scope, TOKEN_While);
@@ -999,7 +1061,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     // Block statement
     match(parent->scope, '{');
 
-    ret = statement_CreateBlock(compiler, parent);
+    ret = statement_CreateBlock(parent);
 
     while (token.type != '}') {
       s_statement *statement = compile_Statement(compiler, ret);
@@ -1022,10 +1084,10 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
         s_token next_token = preview(parent->scope);
         if (next_token.type == '(') {
           // Method definition
-          compile_MethodDefinition(compiler, parent);
+          ret = compile_MethodDefinition(compiler, parent);
         } else {
           // Class definition
-          compile_ClassDefinition(compiler, parent);
+          ret = compile_ClassDefinition(compiler, parent);
         }
       }
 
@@ -1232,7 +1294,7 @@ int main() {
 " |______/  |____|     \n"
 "                      \n"
 " UP Interpreter  v0.3 \n";
-  printf(intro);
+  printf("%s", intro);
 
   char *srcFilename = "helloworld.up";
 

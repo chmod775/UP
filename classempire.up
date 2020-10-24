@@ -69,3 +69,28 @@ Brother : Children {
 }
 
 t1 : Brother = NULL;
+
+
+
+
+
+/*
+for (i : Number = 0; i < 10; i++) {
+    <i;
+}
+*/
+/*
+// Using global types classes (String and Number)
+a : String = "Hello";
+b : String = "World!";
+pi : Number : 3.1415;
+
+print(pi);
+print(a + " " + b);
+print("Value of $1 is: $2", a, pi);
+print('Value of {a} is: {pi}');
+
+c : String;
+c = '{a} {b} {pi}';
+print(c);
+*/

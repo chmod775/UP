@@ -1,70 +1,61 @@
+Number {
+
+}
+
 // Using basic types
     m    :      Number       =5; // Hello
 r:Number = 0;
 
 // p : r = 6; // :DDDDDDDDD
 
-Test {
-    
-}
-
-Add() {
-    Sub() {
-        a : Number = 0;
-    }
-    <4;
-}
-
-r = m + 3;
-r++;
-<r;
-<(r < 10);
-r = r + 1;
-<r;
-<r + (m + 8);
-<(m+m+m+m+m+m+m+m+m);
-
-Add() + 5;
-
-Sub();
-
-m = 775;
-
-<(m);
-<(r);
-
 s1:Number = 1;
 s2:Number = 2;
 s3:Number = s1 + s2;
 
-<(s3);
+Actuator {
+    Motor {
 
-while (s3 < 10000) {
-    s2 = 0;
-    while (s2 < 1000) s2++;
-    s3=s3 + s2;
+    }
+    speed : Number = 0;
+}
+
+Add() {
+    <4;
+}
+
+Main() {
+    t : Number = 0;
+    tt : Actuator = 0;
+    //DEBUG
+    tt : Actuator.Motor = 0;
+
+    r = m + 3;
+    r++;
+    <r;
+    <(r < 10);
+    r = r + 1;
+    <r;
+    <r + (m + 8);
+    <(m+m+m+m+m+m+m+m+m);
+
+    Add() + 5;
+
+    m = 775;
+
+    <(m);
+    <(r);
+
+    <(s3);
+
+    while (s3 < 10000) {
+        s2 = 0;
+        while (s2 < 1000) s2++;
+        s3=s3 + s2;
+    }
+
+
+    <(s3);
 }
 
 
-<(s3);
 
-/*
-for (i : Number = 0; i < 10; i++) {
-    <i;
-}
-*/
-/*
-// Using global types classes (String and Number)
-a : String = "Hello";
-b : String = "World!";
-pi : Number : 3.1415;
-
-print(pi);
-print(a + " " + b);
-print("Value of $1 is: $2", a, pi);
-print('Value of {a} is: {pi}');
-
-c : String;
-c = '{a} {b} {pi}';
-print(c);
-*/
