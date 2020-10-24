@@ -92,11 +92,11 @@ T stack_pop__##T(s_stack__##T *s) { \
 typedef enum {
   TOKEN_Symbol = 128, TOKEN_Debug,
 
-  TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
+  TOKEN_NULL, TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
 
   TOKEN_CommentBlock_End,
 
-  TOKEN_Else, TOKEN_Enum, TOKEN_If, TOKEN_Return, TOKEN_Sizeof, TOKEN_While, TOKEN_For, TOKEN_Switch,
+  TOKEN_If, TOKEN_Else, TOKEN_Return, TOKEN_While, TOKEN_For, TOKEN_Switch,
   TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
 } e_token;
 

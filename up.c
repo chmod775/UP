@@ -300,15 +300,15 @@ s_scope *scope_CreateAsRoot() {
   s_scope *ret = scope_Create(NULL);
 
   // Init symbols with base keywords
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("else", TOKEN_Else));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("enum", TOKEN_Enum));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("NULL", TOKEN_NULL));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("if", TOKEN_If));
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("else", TOKEN_Else));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("return", TOKEN_Return));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("sizeof", TOKEN_Sizeof));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("while", TOKEN_While));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("for", TOKEN_For));
   parlist_push(ret->symbols, symbol_CreateFromKeyword("switch", TOKEN_Switch));
+
+  parlist_push(ret->symbols, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
 
   return ret;
 }
@@ -852,16 +852,19 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
     match(parent->scope, '.');
   }
 
+  if (class_symbol->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compiler_ClassDefinition", "Class already defined.");
+
   class_symbol->type = SYMBOL_CLASS;
   class_symbol->body.class = NEW(s_symbolbody_class);
   class_symbol->body.class->parent = parent_symbol;
-  class_symbol->body.class->scope = parent->scope;
   class_symbol->body.class->fields = list_create();
   class_symbol->body.class->methods = list_create();
 
   s_statement *ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF);
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_symbol;
+
+  class_symbol->body.class->scope = ret->scope;
 
   match(ret->scope, '{');
 
@@ -879,6 +882,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 
   s_symbol *name = token.content.symbol;
   if (!name->isUppercase) CERROR(compiler, "compile_MethodDefinition", "Method definition must start uppercase.");
+  if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_MethodDefinition", "Method already defined.");
 
   s_statement *ret = statement_Create(parent, STATEMENT_METHOD_DEF);
   ret->body.method_def = NEW(s_statementbody_method_def);
@@ -938,7 +942,22 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     ret->isClass = true;
     ret->type = symbol;
 
-    match(statement->scope, token.type);
+    match(statement->scope, TOKEN_Symbol);
+
+    // Childrens
+    while (token.type == '.') {
+      s_symbolbody_class *symbol_body = symbol->body.class;
+      match(symbol_body->scope, '.');
+
+      symbol = token.content.symbol;
+      if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
+      if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
+
+      ret->isClass = true;
+      ret->type = symbol;
+
+      match(symbol_body->scope, TOKEN_Symbol);
+    }
   } else if (token.type == '[') {
     // List
     match(statement->scope, '[');
@@ -980,10 +999,12 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
 }
 
 s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) {
+  s_symbol *name = token.content.symbol;
+  if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldDefinition", "Field already defined.");
+
   s_statement *ret = statement_Create(parent, STATEMENT_FIELD_DEF);
   ret->exe_cb = &__core_field_def;
 
-  s_symbol *name = token.content.symbol;
   match(ret->scope, TOKEN_Symbol);
 
   ret->body.field_def = NEW(s_statementbody_field_def);

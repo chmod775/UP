@@ -2,6 +2,20 @@ Number {
 
 }
 
+Actuator {
+    Motor {
+        Pump {
+
+        }
+        Positioner {
+
+        }
+    }
+
+    speed : Motor.Pump = 0;
+    speed2 : Motor.Positioner = 0;
+}
+
 // Using basic types
     m    :      Number       =5; // Hello
 r:Number = 0;
@@ -12,13 +26,6 @@ s1:Number = 1;
 s2:Number = 2;
 s3:Number = s1 + s2;
 
-Actuator {
-    Motor {
-
-    }
-    speed : Number = 0;
-}
-
 Add() {
     <4;
 }
@@ -27,7 +34,9 @@ Main() {
     t : Number = 0;
     tt : Actuator = 0;
     //DEBUG
-    tt : Actuator.Motor = 0;
+    tt2 : Actuator.Motor = 0;
+    ttt1 : Actuator.Motor.Pump = 0;
+    ttt2 : Actuator.Motor.Positioner = 0;
 
     r = m + 3;
     r++;
