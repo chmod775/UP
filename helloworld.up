@@ -9,7 +9,11 @@ s2:Number = 2;
 s3:Number = s1 + s2;
 
 Add(a : Number, b : Number = 1) : Number {
-    <a;
+    a + b;
+}
+
+Add(a : Number, b : Number, c : Number) : Number {
+    a + c;
 }
 
 Actuator {
@@ -24,6 +28,18 @@ Actuator {
 
     speed : Motor.Pump = 0;
     speed2 : Motor.Positioner = 0;
+
+    (speeeeed : Number) {
+        speed = speeeeed;
+    }
+
+    () {
+        speed = 775;
+    }
+}
+
+Add(a : Number, b : Number, c : Actuator) : Number {
+    a + c;
 }
 
 Actuator {
@@ -59,7 +75,7 @@ Main() {
     <r + (m + 8);
     <(m+m+m+m+m+m+m+m+m);
 
-    Add() + 5;
+    //Add(4, 5) + 5;
 
     m = 775;
 

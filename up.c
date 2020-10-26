@@ -856,6 +856,7 @@ s_symbol *class_Create(char *name, s_scope *scope) {
   symbol->body.class->scope = scope;
   symbol->body.class->fields = list_create();
   symbol->body.class->methods = list_create();
+  symbol->body.class->constructors = list_create();
 
   parlist_push(scope->symbols, symbol);
 
@@ -863,15 +864,22 @@ s_symbol *class_Create(char *name, s_scope *scope) {
 }
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
+  // Only 3 definition statements are allowed in class body
+  // 1. field : type = <expression>;
+  // 2. method(...) : type { <statement> }
+  // 3. class { <statement> }
+
   s_statementbody_class_def *class_body = class->body.class_def;
 
   while ((token.type > 0) && (token.type != '}') ) {
-    s_statement *statement = compile_Statement(compiler, class);
+    s_statement *statement = compile_DefinitionStatement(compiler, class);
     if (statement != NULL) { // If not empty statement
       if (statement->type == STATEMENT_FIELD_DEF) {
         list_push(class_body->symbol->body.class->fields, statement->body.field_def->symbol);
       } else if (statement->type == STATEMENT_METHOD_DEF) {
         list_push(class_body->symbol->body.class->methods, statement->body.method_def->symbol);
+      } else if (statement->type == STATEMENT_CONSTRUCTOR_DEF) {
+        list_push(class_body->symbol->body.class->constructors, statement->body.constructor_def->method);
       } else if (statement->type == STATEMENT_CLASS_DEF) {
         // Do nothing
       } else {
@@ -902,6 +910,8 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
 
   s_statement *ret = NULL;
 
+  if ((class_symbol->type > SYMBOL_NOTDEFINED) && (class_symbol->type != SYMBOL_CLASS)) CERROR(compiler, "compiler_ClassDefinition", "Symbol already defined.");
+
   if (class_symbol->type == SYMBOL_NOTDEFINED) {
     ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF);
 
@@ -910,6 +920,7 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
     class_symbol->body.class->parent = parent_symbol;
     class_symbol->body.class->fields = list_create();
     class_symbol->body.class->methods = list_create();
+    class_symbol->body.class->constructors = list_create();
     class_symbol->body.class->scope = ret->scope;
   } else {
     ret = statement_Create(parent, class_symbol->body.class->scope, STATEMENT_CLASS_DEF);
@@ -927,6 +938,64 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
   return ret;
 }
 
+// ([arg0, arg1, ...]) { <statements> }
+s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent) {
+  if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong parent statement for method definition.");
+  if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compile_MethodDefinition", "Wrong parent symbol.");
+
+  int hash = 1;
+
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_CONSTRUCTOR_DEF);
+  ret->body.constructor_def = NEW(s_statementbody_constructor_def);
+
+  s_method_def *newMethod = NEW(s_method_def);
+  ret->body.constructor_def->method = newMethod;
+
+  s_statement *ret_statement = statement_CreateBlock(parent);
+  newMethod->body = ret_statement;
+
+  // Read arguments
+  match(ret_statement->scope, '(');
+
+  newMethod->arguments = list_create();
+  while (token.type != ')') {
+    s_statement *arg_statement = compile_ArgumentDefinition(compiler, ret_statement);
+
+    list_push(newMethod->arguments, arg_statement->body.field_def->symbol);
+
+    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.type.class->hash;
+
+    if (token.type == ',')
+      match(ret_statement->scope, ',');
+  }
+
+  match(parent->scope, ')');
+
+  newMethod->hash = hash;
+
+  // Check already defined Method overload
+  s_method_def *m = list_read_first(parent->body.class_def->symbol->body.class->constructors);
+  while (m != NULL) {
+    if (hash == m->hash) {
+      // ### TODO: Deep check for memory content, not only hash
+      CERROR(compiler, "compile_MethodDefinition", "Method overload already defined.");
+    }
+    m = list_read_next(parent->body.class_def->symbol->body.class->constructors);
+  }
+
+  // Get body statement for method
+  match(ret_statement->scope, '{');
+
+  while (token.type != '}') {
+    s_statement *statement = compile_Statement(compiler, ret_statement);
+    list_push(ret_statement->body.block->statements, statement);
+  }
+
+  match(parent->scope, '}');
+
+  return ret;
+}
+
 // name([arg0, arg1, ...]) [: <return type>] { <statements> }
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent) {
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong parent statement for method definition.");
@@ -934,7 +1003,10 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 
   s_symbol *name = token.content.symbol;
   if (!name->isUppercase) CERROR(compiler, "compile_MethodDefinition", "Method definition must start uppercase.");
-  if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_MethodDefinition", "Method already defined.");
+
+  if ((name->type > SYMBOL_NOTDEFINED) && (name->type != SYMBOL_METHOD)) CERROR(compiler, "compile_MethodDefinition", "Symbol already defined.");
+
+  int hash = name->hash * 147;
 
   s_statement *ret = statement_CreateInside(parent, STATEMENT_METHOD_DEF);
   ret->body.method_def = NEW(s_statementbody_method_def);
@@ -942,17 +1014,27 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 
   match(parent->scope, TOKEN_Symbol);
 
-  name->body.method = NEW(s_symbolbody_method);
-  name->type = SYMBOL_METHOD;
+  if (name->type == SYMBOL_NOTDEFINED) {
+    name->type = SYMBOL_METHOD;
+    name->body.method = NEW(s_symbolbody_method);
+    name->body.method->overloads = list_create();
+  }
+
+  s_method_def *newMethod = NEW(s_method_def);
 
   s_statement *ret_statement = statement_CreateBlock(parent);
-  name->body.method->body = ret_statement;
+  newMethod->body = ret_statement;
 
   // Read arguments
   match(ret_statement->scope, '(');
 
+  newMethod->arguments = list_create();
   while (token.type != ')') {
     s_statement *arg_statement = compile_ArgumentDefinition(compiler, ret_statement);
+
+    list_push(newMethod->arguments, arg_statement->body.field_def->symbol);
+
+    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.type.class->hash;
 
     if (token.type == ',')
       match(ret_statement->scope, ',');
@@ -964,7 +1046,21 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
     match(parent->scope, ':');
     // Return type
     s_anytype *type = compile_FieldType(compiler, parent);
-    name->body.method->ret_type = *type;
+    newMethod->ret_type = *type;
+
+    hash = hash * 147 + type->type.class->hash;
+  }
+
+  newMethod->hash = hash;
+
+  // Check already defined Method overload
+  s_method_def *m = list_read_first(name->body.method->overloads);
+  while (m != NULL) {
+    if (hash == m->hash) {
+      // ### TODO: Deep check for memory content, not only hash
+      CERROR(compiler, "compile_MethodDefinition", "Method overload already defined.");
+    }
+    m = list_read_next(name->body.method->overloads);
   }
 
   // Get body statement for method
@@ -978,6 +1074,9 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   match(parent->scope, '}');
 
   list_push(parent->body.class_def->symbol->body.class->fields, name);
+
+  // Push to overloads
+  list_push(name->body.method->overloads, newMethod);
 
   return ret;
 }
@@ -1119,6 +1218,47 @@ s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent) {
+  // Definition statements types:
+  // 1. field : type = <expression>;
+  // 2. method(...) : type { <statement> }
+  // 3. class { <statement> }
+  // 4. <empty statement>;
+
+  s_statement *ret = NULL;
+
+  if (token.type == ';') {
+    // Empty statement
+    match(parent->scope, ';');
+  } else if (token.type == TOKEN_Symbol) {
+    if (token.content.symbol->isUppercase) { // Method or Class
+      s_token next_token = preview(parent->scope);
+      if (next_token.type == '(') {
+        // Method definition
+        ret = compile_MethodDefinition(compiler, parent);
+      } else {
+        // Class definition
+        ret = compile_ClassDefinition(compiler, parent);
+      }
+    } else if (token.content.symbol->isFullcase) { // Constant property
+
+    } else if (token.content.symbol->startsUnderscore) { // Private property
+
+    } else {
+      // Field definition
+      ret = compile_FieldDefinition(compiler, parent);
+      match(parent->scope, ';');
+    }
+  } else if (token.type == '(') {
+    // Constructor method definition
+    ret = compile_ConstructorMethodDefinition(compiler, parent);
+  } else {
+    CERROR(compiler, "compile_DefinitionStatement", "Statement not valid.");
+  }
+
+  return ret;
+}
+
 s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   // Statements types:
   // 1. if (...) <statement> [else <statement>]
@@ -1127,10 +1267,8 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   // 4. { <statement> }
   // 5. return xxx;
   // 6. <empty statement>;
-  // 7. field : type = <expression>;
-  // 8. method(...) : type { <statement> }
-  // 9. class { <statement> }
-  // 9. expression; (expression end with semicolon)
+  // 7. expression; (expression end with semicolon)
+  // 8. field : type = <expression>;
 
   s_statement *ret = NULL;
 
@@ -1159,22 +1297,9 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     match(parent->scope, ';');
   } else if (token.type == TOKEN_Symbol) {
     if (token.content.symbol->isUppercase) { // Method or Class
-      if (token.content.symbol->type == SYMBOL_METHOD) {
-        // Expression (espresso ?)
-        ret = compile_Expression(compiler, parent);
-        match(parent->scope, ';');
-      } else {
-        s_token next_token = preview(parent->scope);
-        if (next_token.type == '(') {
-          // Method definition
-          ret = compile_MethodDefinition(compiler, parent);
-        } else {
-          // Class definition
-          ret = compile_ClassDefinition(compiler, parent);
-        }
-      }
-
-      //compiler_ClassDefinition(compiler);
+      // Expression (espresso ?)
+      ret = compile_Expression(compiler, parent);
+      match(parent->scope, ';');
     } else if (token.content.symbol->isFullcase) { // Constant property
 
     } else if (token.content.symbol->startsUnderscore) { // Private property

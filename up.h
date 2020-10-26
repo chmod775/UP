@@ -144,8 +144,10 @@ typedef struct _s_scope {
   s_parlist *symbols;
 } s_scope;
 
-/* ##### STATEMENT ##### */
+/* ##### Method ##### */
+typedef struct _s_method_def s_method_def;
 
+/* ##### STATEMENT ##### */
 typedef enum {
   STATEMENT_BLOCK,
   STATEMENT_IF,
@@ -155,6 +157,7 @@ typedef enum {
   STATEMENT_FIELD_DEF,
   STATEMENT_METHOD_DEF,
   STATEMENT_CLASS_DEF,
+  STATEMENT_CONSTRUCTOR_DEF,
   STATEMENT_EXPRESSION
 } e_statementtype;
 
@@ -186,6 +189,10 @@ typedef struct {
 } s_statementbody_class_def;
 
 typedef struct {
+  s_method_def *method;
+} s_statementbody_constructor_def;
+
+typedef struct {
   s_list *core_operations; // <s_expression_operation>
 } s_statementbody_expression;
 
@@ -196,6 +203,7 @@ typedef union {
   s_statementbody_field_def *field_def;
   s_statementbody_method_def *method_def;
   s_statementbody_class_def *class_def;
+  s_statementbody_constructor_def *constructor_def;
   s_statementbody_expression *expression;
 } u_statementbody;
 
@@ -226,14 +234,13 @@ typedef struct {
 } s_symbolbody_field;
 
 typedef struct {
-  s_anytype ret_type;
-  s_list *arguments; // <s_symbol>
-  s_statement *body;
+  s_list *overloads; // <s_method_def>
 } s_symbolbody_method;
 
 typedef struct {
   s_scope *scope;
   s_symbol *parent;
+  s_list *constructors; // <s_method_def>
   s_list *fields; // <s_symbol<field>>
   s_list *methods; // <s_symbol<method>>
 } s_symbolbody_class;
@@ -321,6 +328,7 @@ s_statement *statement_CreateInside(s_statement *parent, e_statementtype type);
 s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type);
 s_statement *statement_CreateBlock(s_statement *parent);
 
+s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent);
 s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 
 /* ##### For STATEMENT ##### */
@@ -344,13 +352,17 @@ s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *paren
 s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### METHOD ##### */
-typedef struct {
-  s_symbol *symbol;
-} s_method_argument;
+struct _s_method_def {
+  int hash;
+  s_anytype ret_type;
+  s_list *arguments; // <s_symbol>
+  s_statement *body;
+};
 
-s_symbol *method_Create(char *name, s_scope *scope, ...);
+int method_ComputeHash(s_method_def *method);
 
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
+s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### CLASS ##### */
 typedef struct {
@@ -360,7 +372,6 @@ typedef struct {
 
 s_symbol *class_Create(char *name, s_scope *scope);
 
-void class_CreateField(s_symbol *class, char *name);
 void class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_symbol *self, s_list *args));
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
