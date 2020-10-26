@@ -53,6 +53,13 @@ s_list *list_create() {
   ret->selected_item = NULL;
   return ret;
 }
+void list_destroy(s_list *l) {
+  void *last = list_read_last(l);
+  while (last != NULL) {
+    free(last);
+    last = list_read_previous(l);
+  }
+}
 
 void *list_read_index(s_list *l, u_int64_t index) {
   if (l->head_item == NULL) return NULL;
@@ -204,6 +211,13 @@ s_parlist *parlist_create(s_parlist *parent) {
 
   return ret;
 }
+void parlist_destroy(s_parlist *pl) {
+  void *last = parlist_read_last(pl);
+  while (last != NULL) {
+    list_destroy(last);
+    last = parlist_read_previous(pl);
+  }
+}
 
 void *parlist_read_first(s_parlist *pl) {
   s_list *l = list_read_first(pl->lists);
@@ -282,6 +296,21 @@ s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
   ret->body.keyword->token = token;
 
   return ret;
+}
+
+s_symbol *symbol_Find(char *name, s_parlist *symbols) {
+  int hash = hashOfSymbol(name);
+  s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(symbols);
+  
+  while (symbol_ptr != NULL) {
+    if (symbol_ptr->hash == hash) {
+      if (!memcmp(symbol_ptr->name, name, symbol_ptr->length))
+        return symbol_ptr;
+    }
+    symbol_ptr = (s_symbol *)parlist_read_next(symbols);
+  }
+
+  return NULL;
 }
 
 /* ##### Scope ##### */
@@ -599,7 +628,18 @@ s_token parse_Preview(s_scope *scope, s_parser *parser) {
 }
 
 /* ##### STATEMENT ##### */
-s_statement *statement_Create(s_statement *parent, e_statementtype type) {
+s_statement *statement_Create(s_statement *parent, s_scope *scope, e_statementtype type) {
+  s_statement *ret = NEW(s_statement);
+
+  ret->parent = parent;
+  ret->scope = scope;
+
+  ret->type = type;
+  
+  return ret;
+}
+
+s_statement *statement_CreateInside(s_statement *parent, e_statementtype type) {
   s_statement *ret = NEW(s_statement);
 
   ret->parent = parent->parent;
@@ -642,16 +682,8 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
   ret->scope = compiler->rootScope;
   ret->exe_cb = NULL;
 
-  s_symbol *symbol = symbol_Create("Program", SYMBOL_CLASS, -1);
-
   ret->body.class_def = NEW(s_statementbody_class_def);
-  ret->body.class_def->symbol = symbol;
-
-  symbol->body.class = NEW(s_symbolbody_class);
-  symbol->body.class->parent = NULL;
-  symbol->body.class->scope = compiler->rootScope;
-  symbol->body.class->fields = list_create();
-  symbol->body.class->methods = list_create();
+  ret->body.class_def->symbol = class_Create("Program", compiler->rootScope);
 
   return ret;
 }
@@ -745,6 +777,8 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     expression_Emit(core_operations, token);
     match(statement->scope, TOKEN_Literal_Int);
   } else if (token.type == TOKEN_Symbol) {
+    if (token.content.symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
+
     s_token next_token = preview(statement->scope);
 
     if (next_token.type == '(') { // Method call
@@ -801,7 +835,7 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
 }
 
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(parent, STATEMENT_EXPRESSION);
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_EXPRESSION);
 
   ret->exe_cb = &__core_expression;
 
@@ -813,6 +847,20 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+
+s_symbol *class_Create(char *name, s_scope *scope) {
+  s_symbol *symbol = symbol_Create(name, SYMBOL_CLASS, -1);
+
+  symbol->body.class = NEW(s_symbolbody_class);
+  symbol->body.class->parent = NULL;
+  symbol->body.class->scope = scope;
+  symbol->body.class->fields = list_create();
+  symbol->body.class->methods = list_create();
+
+  parlist_push(scope->symbols, symbol);
+
+  return symbol;
+}
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
   s_statementbody_class_def *class_body = class->body.class_def;
@@ -852,19 +900,23 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
     match(parent->scope, '.');
   }
 
-  if (class_symbol->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compiler_ClassDefinition", "Class already defined.");
+  s_statement *ret = NULL;
 
-  class_symbol->type = SYMBOL_CLASS;
-  class_symbol->body.class = NEW(s_symbolbody_class);
-  class_symbol->body.class->parent = parent_symbol;
-  class_symbol->body.class->fields = list_create();
-  class_symbol->body.class->methods = list_create();
+  if (class_symbol->type == SYMBOL_NOTDEFINED) {
+    ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF);
 
-  s_statement *ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF);
+    class_symbol->type = SYMBOL_CLASS;
+    class_symbol->body.class = NEW(s_symbolbody_class);
+    class_symbol->body.class->parent = parent_symbol;
+    class_symbol->body.class->fields = list_create();
+    class_symbol->body.class->methods = list_create();
+    class_symbol->body.class->scope = ret->scope;
+  } else {
+    ret = statement_Create(parent, class_symbol->body.class->scope, STATEMENT_CLASS_DEF);
+  }
+
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_symbol;
-
-  class_symbol->body.class->scope = ret->scope;
 
   match(ret->scope, '{');
 
@@ -884,7 +936,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   if (!name->isUppercase) CERROR(compiler, "compile_MethodDefinition", "Method definition must start uppercase.");
   if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_MethodDefinition", "Method already defined.");
 
-  s_statement *ret = statement_Create(parent, STATEMENT_METHOD_DEF);
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_METHOD_DEF);
   ret->body.method_def = NEW(s_statementbody_method_def);
   ret->body.method_def->symbol = name;
 
@@ -893,25 +945,30 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   name->body.method = NEW(s_symbolbody_method);
   name->type = SYMBOL_METHOD;
 
-  match(parent->scope, '(');
+  s_statement *ret_statement = statement_CreateBlock(parent);
+  name->body.method->body = ret_statement;
 
-  if (token.type != ')') {
-    // Read arguments
+  // Read arguments
+  match(ret_statement->scope, '(');
+
+  while (token.type != ')') {
+    s_statement *arg_statement = compile_ArgumentDefinition(compiler, ret_statement);
+
+    if (token.type == ',')
+      match(ret_statement->scope, ',');
   }
 
   match(parent->scope, ')');
 
   if (token.type == ':') {
+    match(parent->scope, ':');
     // Return type
     s_anytype *type = compile_FieldType(compiler, parent);
     name->body.method->ret_type = *type;
   }
 
   // Get body statement for method
-  s_statement *ret_statement = statement_CreateBlock(parent);
-  name->body.method->body = ret_statement;
-
-  match(parent->scope, '{');
+  match(ret_statement->scope, '{');
 
   while (token.type != '}') {
     s_statement *statement = compile_Statement(compiler, ret_statement);
@@ -931,7 +988,6 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
   ret->isDictionary = false;
   ret->isList = false;
   ret->isClass = false;
-  ret->type = NULL;
 
   if (token.type == TOKEN_Symbol) {
     // Class
@@ -940,7 +996,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
     ret->isClass = true;
-    ret->type = symbol;
+    ret->type.class = symbol;
 
     match(statement->scope, TOKEN_Symbol);
 
@@ -954,7 +1010,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
       if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
       ret->isClass = true;
-      ret->type = symbol;
+      ret->type.class = symbol;
 
       match(symbol_body->scope, TOKEN_Symbol);
     }
@@ -966,7 +1022,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     ltype->items = compile_FieldType(compiler, statement);
 
     ret->isList = true;
-    ret->type = ltype;
+    ret->type.list = ltype;
 
     match(statement->scope, ']');
   } else if (token.type == '{') {
@@ -987,7 +1043,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     dtype->value = compile_FieldType(compiler, statement);
 
     ret->isDictionary = true;
-    ret->type = dtype;
+    ret->type.dictionary = dtype;
 
     match(statement->scope, '}');
   } else {
@@ -998,11 +1054,12 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
   return ret;
 }
 
-s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) {
-  s_symbol *name = token.content.symbol;
-  if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldDefinition", "Field already defined.");
 
-  s_statement *ret = statement_Create(parent, STATEMENT_FIELD_DEF);
+s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *parent) {
+  s_symbol *name = token.content.symbol;
+  if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_ArgumentDefinition", "Symbol already defined.");
+
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_FIELD_DEF);
   ret->exe_cb = &__core_field_def;
 
   match(ret->scope, TOKEN_Symbol);
@@ -1019,19 +1076,24 @@ s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) 
   name->body.field->value.type = *type;
   name->body.field->init_expression = NULL;
 
-  if (token.type != TOKEN_Assign) CERROR(compiler, "compile_FieldDefinition", "Field must have an initiliazation value.");
+  if (token.type == TOKEN_Assign) {
+    match(ret->scope, TOKEN_Assign);
 
-  match(ret->scope, TOKEN_Assign);
+    name->body.field->init_expression = compile_Expression(compiler, ret);
+  }
 
-  name->body.field->init_expression = compile_Expression(compiler, ret);
+  return ret;
+}
 
-  match(ret->scope, ';');
+s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) {
+  s_statement *ret = compile_ArgumentDefinition(compiler, parent);
+  if (ret->body.field_def->symbol->body.field->init_expression == NULL) CERROR(compiler, "compile_FieldDefinition", "Field must have an initiliazation value.");
 
   return ret;
 }
 
 s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(parent, STATEMENT_FOR);
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_FOR);
 
   ret->body._for = NEW(s_statementbody_for);
 
@@ -1044,7 +1106,7 @@ s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
 }
 
 s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
-  s_statement *ret = statement_Create(parent, STATEMENT_WHILE);
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_WHILE);
   ret->exe_cb = &__core_while;
 
   match(ret->scope, TOKEN_While);
@@ -1123,6 +1185,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
       if (next_token.type == ':') {
         // Field definition
         ret = compile_FieldDefinition(compiler, parent);
+        match(parent->scope, ';');
       } else {
         // Expression (espresso ?)
         ret = compile_Expression(compiler, parent);
@@ -1302,6 +1365,10 @@ void __core_while(s_statement *statement) {
 
 void __core_new_class_instance() {}
 
+/* ##### STDLIB 3rd avenue ##### */
+void stdlib_Init(s_compiler *compiler) {
+  s_symbol *number = class_Create("Number", compiler->rootScope);
+}
 
 /* ##### MAIN town ##### */
 s_scope *rootScope;
@@ -1322,6 +1389,7 @@ int main() {
 
   // Compiler
   s_compiler *compiler = compiler_InitFromFile(srcFilename);
+  stdlib_Init(compiler);
   compiler_Execute(compiler);
 
   return 0;

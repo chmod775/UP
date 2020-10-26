@@ -1,5 +1,15 @@
-Number {
+// Using basic types
+    m    :      Number       =5; // Hello
+r:Number = 0;
 
+// p : r = 6; // :DDDDDDDDD
+
+s1:Number = 1;
+s2:Number = 2;
+s3:Number = s1 + s2;
+
+Add(a : Number, b : Number = 1) : Number {
+    <a;
 }
 
 Actuator {
@@ -16,18 +26,18 @@ Actuator {
     speed2 : Motor.Positioner = 0;
 }
 
-// Using basic types
-    m    :      Number       =5; // Hello
-r:Number = 0;
+Actuator {
+    EV {
 
-// p : r = 6; // :DDDDDDDDD
+    }
 
-s1:Number = 1;
-s2:Number = 2;
-s3:Number = s1 + s2;
+    Motor {
+        Fan {
 
-Add() {
-    <4;
+        }
+    }
+
+    monostable : Number = 0;
 }
 
 Main() {
@@ -35,8 +45,10 @@ Main() {
     tt : Actuator = 0;
     //DEBUG
     tt2 : Actuator.Motor = 0;
+    ttttt2 : Actuator.EV = 0;
     ttt1 : Actuator.Motor.Pump = 0;
     ttt2 : Actuator.Motor.Positioner = 0;
+    ttt3 : Actuator.Motor.Fan = 0;
 
     r = m + 3;
     r++;

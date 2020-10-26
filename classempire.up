@@ -70,8 +70,19 @@ Brother : Children {
 
 t1 : Brother = NULL;
 
+// Extension
+Number {
+  Add(a:Number, b:Number) {}
+}
 
+Matrix {
+  Add(a:Matrix, b:Number) {}
+  Add(a:Matrix, b:Matrix) {}
+}
 
+Number {
+  Add(a:Number, b:Matrix) {}
+}
 
 
 /*
@@ -83,7 +94,7 @@ for (i : Number = 0; i < 10; i++) {
 // Using global types classes (String and Number)
 a : String = "Hello";
 b : String = "World!";
-pi : Number : 3.1415;
+pi : Number = 3.1415;
 
 print(pi);
 print(a + " " + b);

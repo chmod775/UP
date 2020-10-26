@@ -11,7 +11,7 @@ FILE *openFile(char *filename);
 
 void closeFile(FILE *fd);
 
-int hashOfString(char *str);
+int hashOfSymbol(char *str);
 
 bool isUppercase_Char(char ch);
 bool isUppercase_String(char *str);
@@ -33,6 +33,7 @@ typedef struct {
 } s_list;
 
 s_list *list_create();
+void list_destroy(s_list *l);
 
 void *list_read_index(s_list *l, u_int64_t index);
 void *list_read_first(s_list *l);
@@ -53,6 +54,7 @@ typedef struct {
 } s_parlist;
 
 s_parlist *parlist_create(s_parlist *parent);
+void parlist_destroy(s_parlist *pl);
 
 void *parlist_read_first(s_parlist *pl);
 void *parlist_read_last(s_parlist *pl);
@@ -101,21 +103,9 @@ typedef enum {
 } e_token;
 
 /* ##### Types ##### */
-typedef struct {
-  bool isClass;
-  bool isDictionary;
-  bool isList;
-  // In case of:
-  //  Dictionary: *type = s_anytype
-  //  List: *type = s_anytype
-  //  Class: *type = s_symbol
-  void *type;
-} s_anytype;
-
-typedef struct {
-  s_anytype type;
-  void *content;
-} s_anyvalue;
+typedef struct _s_anytype s_anytype;
+typedef struct _s_statement s_statement;
+typedef struct _s_symbol s_symbol;
 
 typedef struct {
   s_anytype *key;
@@ -125,6 +115,25 @@ typedef struct {
 typedef struct {
   s_anytype *items;
 } s_listtype;
+
+typedef union {
+  s_symbol *class;
+  s_dictionarytype *dictionary;
+  s_listtype *list;
+} u_anytype;
+
+struct _s_anytype {
+  bool isClass;
+  bool isDictionary;
+  bool isList;
+
+  u_anytype type;
+};
+
+typedef struct {
+  s_anytype type;
+  void *content;
+} s_anyvalue;
 
 s_anyvalue s_anyvalue_createPrimary(int type, void *value);
 
@@ -136,8 +145,6 @@ typedef struct _s_scope {
 } s_scope;
 
 /* ##### STATEMENT ##### */
-typedef struct _s_statement s_statement;
-typedef struct _s_symbol s_symbol;
 
 typedef enum {
   STATEMENT_BLOCK,
@@ -252,12 +259,17 @@ typedef struct _s_symbol {
 } s_symbol;
 
 char *symbol_GetCleanName(s_symbol *symbol);
+
 s_symbol *symbol_Create(char *name, e_symboltype type, int length);
 s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
+
+s_symbol *symbol_Find(char *name, s_parlist *symbols);
 
 /* ##### Scope ##### */
 s_scope *scope_Create(s_scope *parent);
 s_scope *scope_CreateAsRoot();
+
+void scope_Destroy(s_scope *scope);
 
 char *scope_Print(s_scope *scope);
 
@@ -303,7 +315,9 @@ void compiler_Next(s_compiler *compiler);
 
 
 /* ##### STATEMENT ##### */
-s_statement *statement_Create(s_statement *parent, e_statementtype type);
+s_statement *statement_Create(s_statement *parent, s_scope *scope, e_statementtype type);
+
+s_statement *statement_CreateInside(s_statement *parent, e_statementtype type);
 s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type);
 s_statement *statement_CreateBlock(s_statement *parent);
 
@@ -326,12 +340,15 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
 /* ##### FIELD ##### */
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement);
+s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *parent);
 s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### METHOD ##### */
 typedef struct {
   s_symbol *symbol;
 } s_method_argument;
+
+s_symbol *method_Create(char *name, s_scope *scope, ...);
 
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
 
@@ -341,8 +358,10 @@ typedef struct {
   s_list *data; // <void *>
 } s_class_instance;
 
-void class_AddField(s_symbolbody_class *body, s_symbol *field);
-void class_AddMethod(s_symbolbody_class *body, s_symbol *field);
+s_symbol *class_Create(char *name, s_scope *scope);
+
+void class_CreateField(s_symbol *class, char *name);
+void class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_symbol *self, s_list *args));
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
