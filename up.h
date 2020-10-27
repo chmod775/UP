@@ -338,11 +338,35 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 
 
 /* ##### Expression ##### */
+typedef enum {
+  OP_NULL = 0x00,
+
+  OP_Literal_Int = 0x10,
+  OP_Literal_Real,
+  OP_Literal_String,
+
+  OP_AccessField = 0x20,
+
+  OP_MethodCall = 0x30,
+
+  OP_ConstructorCall = 0x40
+} e_expression_operation_type;
+
+typedef union {
+  int64_t integer;
+  double decimal;
+  char *string;
+  s_symbol *field;
+  s_method_def *method;
+} u_expression_operation_payload;
+
 typedef struct {
-  s_token *token;
+  e_expression_operation_type type;
+  u_expression_operation_payload payload;
 } s_expression_operation;
 
-s_expression_operation *expression_Emit(s_list *core_operations, s_token token);
+s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type);
+
 void expression_Step(s_compiler *compiler, s_statement *statement, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
@@ -393,31 +417,20 @@ typedef struct {
 
 /* ##### CORE libs ##### */
 s_anyvalue __core_exe_expression(s_statement *statement);
-void __core_exe_assign(s_symbol *symbol, s_anyvalue item);
 
-void __core_print(s_stack__core_expression_item *stack);
+void __core_class_createInstance(s_statement *statement);
+void __core_class_executeConstructor(s_statement *statement);
+void __core_method_execute(s_statement *statement);
 
-void __core_assign(s_stack__core_expression_item *stack);
-
-void __core_add(s_stack__core_expression_item *stack);
-void __core_sub(s_stack__core_expression_item *stack);
-void __core_mul(s_stack__core_expression_item *stack);
-void __core_div(s_stack__core_expression_item *stack);
-
-void __core_inc(s_stack__core_expression_item *stack);
-void __core_dec(s_stack__core_expression_item *stack);
-
-void __core_cmp(s_stack__core_expression_item *stack);
+void __core_field_def(s_statement *statement);
 
 void __core_expression(s_statement *statement);
-void __core_field_def(s_statement *statement);
-void __core_call_method(s_statement *statement);
 
 void __core_exe_statement(s_statement *statement);
 
+void __core_if(s_statement *statement);
+void __core_for(s_statement *statement);
 void __core_while(s_statement *statement);
-
-void __core_new_class_instance();
 
 // Symbols actions
 void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);

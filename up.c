@@ -744,21 +744,9 @@ void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
   __core_exe_statement(compiler->rootStatement);
 }
 
-s_expression_operation *expression_Emit(s_list *core_operations, s_token token) {
+s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type) {
   s_expression_operation *op = NEW(s_expression_operation);
-  s_token *token_copy = NEW(s_token);
-  memcpy(token_copy, &token, sizeof(s_token));
-  op->token = token_copy;
-  list_push(core_operations, op);
-  return op;
-}
-
-s_expression_operation *expression_Emit_Callback(s_list *core_operations, int type, void (*cb)(s_stack__core_expression_item *)) {
-  s_expression_operation *op = NEW(s_expression_operation);
-  s_token *token_copy = NEW(s_token);
-  token_copy->type = type;
-  token_copy->content.any = cb;
-  op->token = token_copy;
+  op->type = type;
   list_push(core_operations, op);
   return op;
 }
@@ -772,40 +760,70 @@ s_expression_operation *expression_Emit_Callback(s_list *core_operations, int ty
 void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
   s_list *core_operations = statement->body.expression->core_operations;
   
+  s_expression_operation *op = NULL;
+
   // Unary operators
   if (token.type == TOKEN_Literal_Int) {
-    expression_Emit(core_operations, token);
+    op = expression_Emit(core_operations, OP_Literal_Int);
+    op->payload.integer = token.content.integer;
     match(statement->scope, TOKEN_Literal_Int);
   } else if (token.type == TOKEN_Symbol) {
-    if (token.content.symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
+    s_symbol *symbol = token.content.symbol;
+    if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
 
-    s_token next_token = preview(statement->scope);
+    match(statement->scope, TOKEN_Symbol);
 
-    if (next_token.type == '(') { // Method call
-      match(statement->scope, TOKEN_Symbol);
+    while (token.type == '.') { // Descend parent hierarchy
+      s_scope *parent_scope = statement->scope;
+
+      if (symbol->type == SYMBOL_CLASS) {
+        parent_scope = symbol->body.class->scope;
+      } else if (symbol->type == SYMBOL_FIELD) {
+        if (!symbol->body.field->value.type.isClass) CERROR(compiler, "expression_Step", "Parent field is not of Class type.");
+        parent_scope = symbol->body.field->value.type.type.class->body.class->scope;
+      } else {
+        CERROR(compiler, "expression_Step", "Parent symbol is not valid.");
+      }
+
+      match(parent_scope, '.');
+
+      symbol = token.content.symbol;
+      if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
+
+      match(parent_scope, TOKEN_Symbol);
+    }
+
+    if (token.type == '(') { // Call of Method or Constructor
+      // Arguments
       match(statement->scope, '(');
-      // Call arguments
+/*
+      while (token.type != ')') {
+        expression_Step(compiler, statement, TOKEN_Assign);
+      }
+*/
       match(statement->scope, ')');
-      expression_Emit(core_operations, token);
+
+      if (symbol->type == SYMBOL_METHOD) { // Internal method call
+        op = expression_Emit(core_operations, OP_MethodCall);
+        //op->payload.method = symbol->body.method->overloads
+      } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
+        op = expression_Emit(core_operations, OP_ConstructorCall);
+
+      } else {
+        CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
+      }
     } else {
-      expression_Emit(core_operations, token);
-      match(statement->scope, TOKEN_Symbol);
+      op = expression_Emit(core_operations, OP_ConstructorCall);
+      op->payload.field = symbol;
     }
   } else if (token.type == '(') {
     match(statement->scope, '(');
     expression_Step(compiler, statement, TOKEN_Assign);
     match(statement->scope, ')');
-  } else if (token.type == TOKEN_Add) {
-    // Convert string to number (Javascript like)
-
-  } else if (token.type == TOKEN_Inc) {
-
   } else if (token.type == TOKEN_Lt) {
     match(statement->scope, TOKEN_Lt);
-    expression_Step(compiler, statement, TOKEN_Lt);
-    expression_Emit_Callback(core_operations, TOKEN_Lt, &__core_print);
   } else {
-    CERROR(compiler, "expression_Step", "Bad expression");
+    CERROR(compiler, "expression_Step", "Bad expression.");
     exit(-1);
   }
 
@@ -814,19 +832,18 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     if (token.type == TOKEN_Assign) {
       match(statement->scope, TOKEN_Assign);
       expression_Step(compiler, statement, TOKEN_Assign);
-      expression_Emit_Callback(core_operations, TOKEN_Assign, &__core_assign);
+
     } else if (token.type == TOKEN_Add) {
       match(statement->scope, TOKEN_Add);
       expression_Step(compiler, statement, TOKEN_Mul);
 
-      expression_Emit_Callback(core_operations, TOKEN_Add, &__core_add);
     } else if (token.type == TOKEN_Inc) {
       match(statement->scope, TOKEN_Inc);
-      expression_Emit_Callback(core_operations, TOKEN_Inc, &__core_inc);
+      
     } else if (token.type == TOKEN_Lt) {
       match(statement->scope, TOKEN_Lt);
       expression_Step(compiler, statement, TOKEN_Lt);
-      expression_Emit_Callback(core_operations, TOKEN_Inc, &__core_cmp);
+
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1361,54 +1378,11 @@ void __core_exe_assign(s_symbol *symbol, s_anyvalue item) {
 */
 }
 
-void __core_assign(s_stack__core_expression_item *stack) {
-  s_anyvalue a = stack_pop__core_expression_item(stack).value;
 
-  core_expression_item b = stack_pop__core_expression_item(stack);
-  if (b.op == NULL) PERROR("__core_assign", "Stack assign destination cannot be NULL");
-  if (b.op->token->type != TOKEN_Symbol) PERROR("__core_assign", "Assignment destination not valid");
 
-  s_symbol *dest_symbol = b.op->token->content.symbol;
-
-  __core_exe_assign(dest_symbol, a);
-
-  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, a));
-}
-
-void __core_add(s_stack__core_expression_item *stack) {
-  s_anyvalue a = stack_pop__core_expression_item(stack).value;
-  s_anyvalue b = stack_pop__core_expression_item(stack).value;
-  s_anyvalue r;
-
-  // T O D O
-
-  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, r));
-}
-void __core_sub(s_stack__core_expression_item *stack) {}
-void __core_mul(s_stack__core_expression_item *stack) {}
-void __core_div(s_stack__core_expression_item *stack) {}
-
-void __core_inc(s_stack__core_expression_item *stack) {
-  core_expression_item a = stack_pop__core_expression_item(stack);
-  if (a.op->token->type != TOKEN_Symbol) PERROR("__core_inc", "Destination not valid");
-  s_symbol *dest_symbol = a.op->token->content.symbol;
-
-  // T O D O
-
-  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, dest_symbol->body.field->value));
-}
-
-void __core_cmp(s_stack__core_expression_item *stack) {
-  s_anyvalue b = stack_pop__core_expression_item(stack).value;
-  s_anyvalue a = stack_pop__core_expression_item(stack).value;
-  s_anyvalue r;
-
-  // T O D O
-
-  stack_push__core_expression_item(stack, core_expression_item_Create(NULL, r));
-}
 
 s_anyvalue __core_exe_expression(s_statement *statement) {
+  /*
   s_stack__core_expression_item stack = stack_create__core_expression_item(50);
   stack.ptr = 0;
 
@@ -1440,6 +1414,7 @@ s_anyvalue __core_exe_expression(s_statement *statement) {
   stack_free__core_expression_item(stack);
 
   return ret;
+  */
 }
 
 

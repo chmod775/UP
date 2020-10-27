@@ -14,15 +14,20 @@ Add(a : Number, b : Number = 1) : Number {
 
 Add(a : Number, b : Number, c : Number) : Number {
     a + c;
+    s3 = a;
 }
 
 Actuator {
+    test : Number = 0;
+
     Motor {
         Pump {
 
         }
         Positioner {
-
+            (aaaa : Number) {
+                test = s3;
+            }
         }
     }
 
@@ -49,7 +54,10 @@ Actuator {
 
     Motor {
         Fan {
-
+            running : Number = 0;
+            Start() {
+                running = 255;
+            }
         }
     }
 
@@ -65,6 +73,9 @@ Main() {
     ttt1 : Actuator.Motor.Pump = 0;
     ttt2 : Actuator.Motor.Positioner = 0;
     ttt3 : Actuator.Motor.Fan = 0;
+
+    ttt3.Start();
+    ttt3.running;
 
     r = m + 3;
     r++;
