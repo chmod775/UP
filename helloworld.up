@@ -1,6 +1,14 @@
+Test {
+    (a : Number) {
+
+    }
+}
+
+pp : Test = Test(1);
+
+r:Number = Number(775);
 // Using basic types
     m    :      Number       =5; // Hello
-r:Number = 0;
 
 // p : r = 6; // :DDDDDDDDD
 
@@ -58,6 +66,10 @@ Actuator {
             Start() {
                 running = 255;
             }
+
+            Start(state : Number) {
+                running = state;
+            }
         }
     }
 
@@ -74,7 +86,7 @@ Main() {
     ttt2 : Actuator.Motor.Positioner = 0;
     ttt3 : Actuator.Motor.Fan = 0;
 
-    ttt3.Start();
+    ttt3.Start(1);
     ttt3.running;
 
     r = m + 3;

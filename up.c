@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "up.h"
 
@@ -779,8 +780,8 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
       if (symbol->type == SYMBOL_CLASS) {
         parent_scope = symbol->body.class->scope;
       } else if (symbol->type == SYMBOL_FIELD) {
-        if (!symbol->body.field->value.type.isClass) CERROR(compiler, "expression_Step", "Parent field is not of Class type.");
-        parent_scope = symbol->body.field->value.type.type.class->body.class->scope;
+        if (symbol->body.field->value.type.category != TYPE_CLASS) CERROR(compiler, "expression_Step", "Parent field is not of Class type.");
+        parent_scope = symbol->body.field->value.type.content.class->body.class->scope;
       } else {
         CERROR(compiler, "expression_Step", "Parent symbol is not valid.");
       }
@@ -796,19 +797,45 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     if (token.type == '(') { // Call of Method or Constructor
       // Arguments
       match(statement->scope, '(');
-/*
+
+      u_int64_t TEMP_arguments_count = 0;
       while (token.type != ')') {
         expression_Step(compiler, statement, TOKEN_Assign);
+
+        if (token.type == ',')
+          match(statement->scope, ',');
+
+        TEMP_arguments_count++;
       }
-*/
+
       match(statement->scope, ')');
 
       if (symbol->type == SYMBOL_METHOD) { // Internal method call
         op = expression_Emit(core_operations, OP_MethodCall);
-        //op->payload.method = symbol->body.method->overloads
+
+        s_method_def *found_overload = list_read_first(symbol->body.method->overloads);
+        while (found_overload != NULL) {
+          if (found_overload->arguments->items_count == TEMP_arguments_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
+            break;
+          found_overload = list_read_next(symbol->body.method->overloads);
+        }
+
+        if (found_overload == NULL) CERROR(compiler, "expression_Step", "Method overload not found.");
+
+        op->payload.method = found_overload;
       } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
         op = expression_Emit(core_operations, OP_ConstructorCall);
 
+        s_method_def *found_constructor = list_read_first(symbol->body.class->constructors);
+        while (found_constructor != NULL) {
+          if (found_constructor->arguments->items_count == TEMP_arguments_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
+            break;
+          found_constructor = list_read_next(symbol->body.class->constructors);
+        }
+
+        if (found_constructor == NULL) CERROR(compiler, "expression_Step", "Constructor not found.");
+
+        op->payload.method = found_constructor;
       } else {
         CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
       }
@@ -822,6 +849,8 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     match(statement->scope, ')');
   } else if (token.type == TOKEN_Lt) {
     match(statement->scope, TOKEN_Lt);
+  } else if (token.type == ',') {
+    return;
   } else {
     CERROR(compiler, "expression_Step", "Bad expression.");
     exit(-1);
@@ -880,6 +909,56 @@ s_symbol *class_Create(char *name, s_scope *scope) {
   return symbol;
 }
 
+s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *self, s_list *args), int nArguments, ...) {
+  if (class->type != SYMBOL_CLASS) PERROR("class_CreateConstructor", "Symbol is not a Class.");
+
+  va_list valist;
+  va_start(valist, nArguments);
+
+  int hash = 1;
+
+  s_method_def *newMethod = NEW(s_method_def);
+
+  newMethod->body.type = METHODBODY_CALLBACK;
+  newMethod->body.content.callback = cb;
+
+  // Add arguments
+  newMethod->arguments = list_create();
+  int i;
+  for (i = 0; i < nArguments; i++) {
+    char *typeClassName = va_arg(valist, char *);
+
+    if (typeClassName == NULL) { // Literal only, used for Primary classes like Number, String
+      list_push(newMethod->arguments, NULL);
+      hash = hash * 147 + 255;
+    } else {
+      s_symbol *foundType = symbol_Find(typeClassName, class->body.class->scope->symbols);
+      if (foundType == NULL) PERROR("class_CreateConstructor", "Class type not found.");
+
+      hash = hash * 147 + foundType->hash;
+
+      list_push(newMethod->arguments, foundType);
+    }
+  }
+
+  newMethod->hash = hash;
+
+  // Check already defined Method overload
+  s_method_def *m = list_read_first(class->body.class->constructors);
+  while (m != NULL) {
+    if (hash == m->hash) {
+      // ### TODO: Deep check for memory content, not only hash
+      PERROR("class_CreateConstructor", "Constructor overload already defined.");
+    }
+    m = list_read_next(class->body.class->constructors);
+  }
+
+  // Add to class constructors
+  list_push(class->body.class->constructors, newMethod);
+
+  va_end(valist);
+}
+
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
   // Only 3 definition statements are allowed in class body
   // 1. field : type = <expression>;
@@ -892,7 +971,10 @@ void compile_ClassBody(s_compiler *compiler, s_statement *class) {
     s_statement *statement = compile_DefinitionStatement(compiler, class);
     if (statement != NULL) { // If not empty statement
       if (statement->type == STATEMENT_FIELD_DEF) {
-        list_push(class_body->symbol->body.class->fields, statement->body.field_def->symbol);
+        s_symbol *field_symbol = statement->body.field_def->symbol;
+        s_list *fields_list = class_body->symbol->body.class->fields;
+        field_symbol->body.field->value.data_index = fields_list->items_count;
+        list_push(fields_list, field_symbol);
       } else if (statement->type == STATEMENT_METHOD_DEF) {
         list_push(class_body->symbol->body.class->methods, statement->body.method_def->symbol);
       } else if (statement->type == STATEMENT_CONSTRUCTOR_DEF) {
@@ -969,7 +1051,8 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
   ret->body.constructor_def->method = newMethod;
 
   s_statement *ret_statement = statement_CreateBlock(parent);
-  newMethod->body = ret_statement;
+  newMethod->body.type = METHODBODY_STATEMENT;
+  newMethod->body.content.statement = ret_statement;
 
   // Read arguments
   match(ret_statement->scope, '(');
@@ -980,7 +1063,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
 
     list_push(newMethod->arguments, arg_statement->body.field_def->symbol);
 
-    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.type.class->hash;
+    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.content.class->hash;
 
     if (token.type == ',')
       match(ret_statement->scope, ',');
@@ -995,7 +1078,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
   while (m != NULL) {
     if (hash == m->hash) {
       // ### TODO: Deep check for memory content, not only hash
-      CERROR(compiler, "compile_MethodDefinition", "Method overload already defined.");
+      CERROR(compiler, "compile_MethodDefinition", "Constructor overload already defined.");
     }
     m = list_read_next(parent->body.class_def->symbol->body.class->constructors);
   }
@@ -1040,7 +1123,8 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   s_method_def *newMethod = NEW(s_method_def);
 
   s_statement *ret_statement = statement_CreateBlock(parent);
-  newMethod->body = ret_statement;
+  newMethod->body.type = METHODBODY_STATEMENT;
+  newMethod->body.content.statement = ret_statement;
 
   // Read arguments
   match(ret_statement->scope, '(');
@@ -1051,7 +1135,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 
     list_push(newMethod->arguments, arg_statement->body.field_def->symbol);
 
-    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.type.class->hash;
+    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.content.class->hash;
 
     if (token.type == ',')
       match(ret_statement->scope, ',');
@@ -1065,7 +1149,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
     s_anytype *type = compile_FieldType(compiler, parent);
     newMethod->ret_type = *type;
 
-    hash = hash * 147 + type->type.class->hash;
+    hash = hash * 147 + type->content.class->hash;
   }
 
   newMethod->hash = hash;
@@ -1101,9 +1185,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
   s_anytype *ret = NEW(s_anytype);
 
-  ret->isDictionary = false;
-  ret->isList = false;
-  ret->isClass = false;
+  ret->category = TYPE_ANY;
 
   if (token.type == TOKEN_Symbol) {
     // Class
@@ -1111,8 +1193,8 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
     if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
-    ret->isClass = true;
-    ret->type.class = symbol;
+    ret->category = TYPE_CLASS;
+    ret->content.class = symbol;
 
     match(statement->scope, TOKEN_Symbol);
 
@@ -1125,8 +1207,8 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
       if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
       if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
-      ret->isClass = true;
-      ret->type.class = symbol;
+      ret->category = TYPE_CLASS;
+      ret->content.class = symbol;
 
       match(symbol_body->scope, TOKEN_Symbol);
     }
@@ -1137,8 +1219,8 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     s_listtype *ltype = NEW(s_listtype);
     ltype->items = compile_FieldType(compiler, statement);
 
-    ret->isList = true;
-    ret->type.list = ltype;
+    ret->category = TYPE_LIST;
+    ret->content.list = ltype;
 
     match(statement->scope, ']');
   } else if (token.type == '{') {
@@ -1149,7 +1231,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
 
     dtype->key = compile_FieldType(compiler, statement);
 
-    if (!dtype->key->isClass) {
+    if (dtype->key->category != TYPE_CLASS) {
       CERROR(compiler, "compile_FieldType", "Dictionary key can only be of primary type");
       exit(-1);
     }
@@ -1158,8 +1240,8 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
 
     dtype->value = compile_FieldType(compiler, statement);
 
-    ret->isDictionary = true;
-    ret->type.dictionary = dtype;
+    ret->category = TYPE_DICTIONARY;
+    ret->content.dictionary = dtype;
 
     match(statement->scope, '}');
   } else {
@@ -1456,19 +1538,33 @@ void __core_while(s_statement *statement) {
   s_statementbody_while *statement_body = statement->body._while;
 
   s_anyvalue check_result = __core_exe_expression(statement_body->check);
-  
+  /*
   while (check_result.content) {
     __core_exe_statement(statement_body->loop);
     check_result = __core_exe_expression(statement_body->check);
   }
+  */
 }
 
 void __core_new_class_instance() {}
 
 /* ##### STDLIB 3rd avenue ##### */
-void stdlib_Init(s_compiler *compiler) {
-  s_symbol *number = class_Create("Number", compiler->rootScope);
+void number_Constructor(s_class_instance *self, s_list *args) {
+
 }
+
+void stdlib_Init(s_compiler *compiler) {
+  s_symbol *numberClass = class_Create("Number", compiler->rootScope);
+  // class_CreateField(numberClass, "raw", NULL, sizeof(u_int64_t));
+  class_CreateConstructor(numberClass, &number_Constructor, 1, NULL);
+  // class_CreateConstructor(numberClass, &number_Constructor, 1, "Number");
+  // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
+  // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
+  // class_CreateMethod(numberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
+  // class_CreateMethod(numberClass, "Add", &number_Add_Number_Number, 2, "Number", "Number");
+}
+
+
 
 /* ##### MAIN town ##### */
 s_scope *rootScope;

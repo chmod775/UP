@@ -106,6 +106,7 @@ typedef enum {
 typedef struct _s_anytype s_anytype;
 typedef struct _s_statement s_statement;
 typedef struct _s_symbol s_symbol;
+typedef struct _s_class_instance s_class_instance;
 
 typedef struct {
   s_anytype *key;
@@ -120,19 +121,23 @@ typedef union {
   s_symbol *class;
   s_dictionarytype *dictionary;
   s_listtype *list;
-} u_anytype;
+} u_anytype_content;
+
+typedef enum {
+  TYPE_ANY,
+  TYPE_CLASS,
+  TYPE_LIST,
+  TYPE_DICTIONARY
+} e_anytype_category;
 
 struct _s_anytype {
-  bool isClass;
-  bool isDictionary;
-  bool isList;
-
-  u_anytype type;
+  e_anytype_category category;
+  u_anytype_content content;
 };
 
 typedef struct {
   s_anytype type;
-  void *content;
+  u_int64_t data_index;
 } s_anyvalue;
 
 s_anyvalue s_anyvalue_createPrimary(int type, void *value);
@@ -229,7 +234,7 @@ typedef struct {
 } s_symbolbody_keyword;
 
 typedef struct {
-  s_anyvalue value; // Actual values are stored in the instance
+  s_anyvalue value;
   s_statement *init_expression;
 } s_symbolbody_field;
 
@@ -376,27 +381,46 @@ s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *paren
 s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### METHOD ##### */
+typedef enum {
+  METHODBODY_STATEMENT,
+  METHODBODY_CALLBACK
+} e_methodbody_type;
+
+typedef union {
+  s_statement *statement;
+  void (*callback)(s_class_instance *self, s_list *args);
+} u_methodbody_content;
+
+typedef struct {
+  e_methodbody_type type;
+  u_methodbody_content content;
+} s_methodbody;
+
 struct _s_method_def {
   int hash;
   s_anytype ret_type;
   s_list *arguments; // <s_symbol>
-  s_statement *body;
+  s_methodbody body;
 };
 
 int method_ComputeHash(s_method_def *method);
+
+
 
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
 s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### CLASS ##### */
-typedef struct {
+struct _s_class_instance {
   s_symbol *class;
-  s_list *data; // <void *>
-} s_class_instance;
+  void *data;
+};
 
 s_symbol *class_Create(char *name, s_scope *scope);
 
-void class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_symbol *self, s_list *args));
+s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *self, s_list *args), int nArguments, ...);
+
+void class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *self, s_list *args));
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
