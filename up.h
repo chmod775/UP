@@ -192,7 +192,7 @@ struct _s_statement {
   s_scope *scope;
   u_statementbody body;
   e_statementtype type;
-  void (*exe_cb)(struct _s_statement *);
+  void (*exe_cb)(s_class_instance *, struct _s_statement *);
 };
 
 /* ##### Symbols ##### */
@@ -399,14 +399,13 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement);
 
 void __core_class_createInstance(s_statement *statement);
-void __core_class_executeConstructor(s_statement *statement);
-void __core_method_execute(s_statement *statement);
+s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_list *args);
 
 void __core_field_def(s_statement *statement);
 
-void __core_expression(s_statement *statement);
+void __core_expression(s_class_instance *self, s_statement *statement);
 
-void __core_exe_statement(s_statement *statement);
+void __core_exe_statement(s_class_instance *self, s_statement *statement);
 
 void __core_if(s_statement *statement);
 void __core_for(s_statement *statement);

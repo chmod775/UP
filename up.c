@@ -752,7 +752,12 @@ void compiler_Execute(s_compiler *compiler) {
 
   compile_ClassBody(compiler, compiler->rootStatement);
 
-  class_CreateInstance(compiler->rootStatement->body.class_def->symbol);
+  s_class_instance *programInstance = class_CreateInstance(compiler->rootStatement->body.class_def->symbol);
+
+  s_list *args = list_create();
+  s_method_def *mainMethod = class_FindMethod(compiler->rootStatement->body.class_def->symbol, "Main", args);
+
+  __core_exe_method(programInstance, mainMethod, args);
 }
 
 void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
@@ -761,8 +766,6 @@ void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
   compile_Statement(compiler, compiler->rootStatement);
-
-  __core_exe_statement(compiler->rootStatement);
 }
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type) {
@@ -823,6 +826,11 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     if (token.type == '(') { // Call of Method or Constructor
       // Arguments
       match(statement->scope, '(');
+
+      if (symbol->type == SYMBOL_METHOD) {
+        op = expression_Emit(operations, OP_AccessField);
+        op->payload.field = target_symbol;
+      }
 
       u_int64_t TEMP_arguments_count = 0;
       while (token.type != ')') {
@@ -885,8 +893,20 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   // binary operator and postfix operators.
   while (token.type >= level) {
     if (token.type == TOKEN_Assign) {
+      s_expression_operation *op_target = NEW(s_expression_operation);
+      op_target->type = op->type;
+      op_target->payload = op->payload;
+
       match(statement->scope, TOKEN_Assign);
 
+      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Assign);
+
+      s_list *args = list_create();
+      list_push(args, op_arg);
+
+      op = expression_Emit(operations, OP_MethodCall);
+
+      op->payload.method = class_FindMethod(op_target->payload.field->body.field->value.type, "Assign", args);
     } else if (token.type == TOKEN_Add) {
       s_expression_operation *op_target = NEW(s_expression_operation);
       op_target->type = op->type;
@@ -1201,6 +1221,9 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
   s_statement *ret_statement = statement_CreateBlock(parent);
   newMethod->body.type = METHODBODY_STATEMENT;
   newMethod->body.content.statement = ret_statement;
+
+  // Constructor return itself
+  newMethod->ret_type = parent->body.class_def->symbol;
 
   // Read arguments
   match(ret_statement->scope, '(');
@@ -1580,7 +1603,8 @@ void __core_exe_assign(s_symbol *symbol, s_anyvalue item) {
 
 
 
-void __core_expression(s_statement *statement) {
+void __core_expression(s_class_instance *self, s_statement *statement) {
+  __core_exe_expression(self, statement);
 }
 
 void __core_field_def(s_statement *statement) {
@@ -1589,18 +1613,20 @@ void __core_field_def(s_statement *statement) {
 
 void __core_call_method(s_statement *statement) {}
 
-void __core_exe_statement(s_statement *statement) {
-  if (statement->type == STATEMENT_BLOCK) {
-    s_statementbody_block *statement_body = statement->body.block;
+void __core_exe_statement(s_class_instance *self, s_statement *statement) {
+  if (statement != NULL) {
+    if (statement->type == STATEMENT_BLOCK) {
+      s_statementbody_block *statement_body = statement->body.block;
 
-    s_statement *sub_statement = list_read_first(statement_body->statements);
-    do {
-      __core_exe_statement(sub_statement);
-      sub_statement = list_read_next(statement_body->statements);
-    } while (sub_statement != NULL);
-  } else {
-    if (statement->exe_cb)
-      statement->exe_cb(statement);
+      s_statement *sub_statement = list_read_first(statement_body->statements);
+      do {
+        __core_exe_statement(self, sub_statement);
+        sub_statement = list_read_next(statement_body->statements);
+      } while (sub_statement != NULL);
+    } else {
+      if (statement->exe_cb)
+        statement->exe_cb(self, statement);
+    }
   }
 }
 
@@ -1620,6 +1646,17 @@ void __core_while(s_statement *statement) {
 
 void __core_new_class_instance() {}
 
+s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_list *args) {
+  if (method->body.type == METHODBODY_STATEMENT) {
+    __core_exe_statement(self, method->body.content.statement);
+    return NULL;
+  } else if (method->body.type == METHODBODY_CALLBACK) {
+    return method->body.content.callback(self, args);
+  } else {
+    PERROR("__core_exe_expression", "Method type error.");
+  }
+}
+
 s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement) {
   if (statement->type != STATEMENT_EXPRESSION) PERROR("__core_exe_expression", "Wrong statement type");
 
@@ -1635,11 +1672,6 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       s_class_instance *value = NULL;
 
-      // Pop target
-      s_class_instance *target = NULL;
-      if (op->type == OP_MethodCall)
-        target = list_pop(stack);
-
       // Pop arguments from stack
       s_list *args = list_create();
       u_int64_t args_count = op->payload.method->arguments->items_count;
@@ -1647,19 +1679,20 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
       u_int64_t arg_idx;
       for (arg_idx = 0; arg_idx < args_count; arg_idx++) {
         s_class_instance *arg_value = list_pop(stack);
-
+        list_push(args, arg_value);
       }
 
-      // Call methods
-      if (op->payload.method->body.type == METHODBODY_STATEMENT) {
-
-      } else if (op->payload.method->body.type == METHODBODY_CALLBACK) {
-        value = op->payload.method->body.content.callback(target, args);
-      } else {
-        PERROR("__core_exe_expression", "Method type error.");
+      // Pop target and call method
+      s_class_instance *target = NULL;
+      if (op->type == OP_MethodCall) {
+        target = list_pop(stack);
+        value = __core_exe_method(target, op->payload.method, args);
+        list_push(stack, value);
+      } else if (op->type == OP_ConstructorCall) {
+        target = class_CreateInstance(op->payload.method->ret_type);
+        __core_exe_method(target, op->payload.method, args);
+        list_push(stack, target);
       }
-
-      list_push(stack, value);
     } else {
       PERROR("__core_exe_expression", "Operation not allowed.");
     }
@@ -1684,7 +1717,7 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
   while (field_symbol != NULL) {
     s_class_instance *init_value = __core_exe_expression(instance, field_symbol->body.field->init_expression);
-    //instance->data[field_symbol->body.field->value.data_index] = NULL;
+    instance->data[field_symbol->body.field->value.data_index] = init_value;
 
     field_symbol = list_read_next(instance->class->body.class->fields);
   }
@@ -1696,17 +1729,31 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 s_symbol *numberClass = NULL;
 
 s_class_instance *number_Constructor(s_class_instance *self, s_list *args) {
-  s_class_instance *ret = class_CreateInstance(numberClass);
-  ret->data = malloc(sizeof(u_int16_t));
-  return ret;
+  self->data = malloc(sizeof(u_int16_t));
+  self->data = 0x775;
+  return self;
 }
 
 s_class_instance *number_Add_Number(s_class_instance *self, s_list *args) {
   s_class_instance *ret = class_CreateInstance(numberClass);
 
+  s_class_instance *arg_B = list_read_first(args);
 
+  ret->data = malloc(sizeof(u_int16_t));
+  ret->data = (u_int16_t)self->data + (u_int16_t)arg_B->data;
 
   return ret;
+}
+
+s_class_instance *number_Assign_Number(s_class_instance *self, s_list *args) {
+  s_class_instance *arg_B = list_read_first(args);
+  self->data = arg_B->data;
+  return self;
+}
+
+s_class_instance *number_Assign_Print(s_class_instance *self, s_list *args) {
+  printf("%X\n", self->data);
+  return NULL;
 }
 
 void stdlib_Init(s_compiler *compiler) {
@@ -1719,6 +1766,8 @@ void stdlib_Init(s_compiler *compiler) {
   // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
   // class_CreateMethod(numberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
   class_CreateMethod(numberClass, "Add", &number_Add_Number, "Number", 1, "Number");
+  class_CreateMethod(numberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
+  class_CreateMethod(numberClass, "Print", &number_Assign_Print, NULL, 0);
 }
 
 

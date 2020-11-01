@@ -1,7 +1,24 @@
 a : Number = Number();
 b : Number = Number(10);
 c : Number = Number(1);
-d : Number = (a + b + d) + (a + b + d);
+d : Number = (a + b + c) + (a + b + c);
+
+Boia {
+  p : Number = Number();
+  g : Number = Number();
+
+  () {
+    g = p + p;
+    g = Number();
+  }
+
+  De() {
+    p.Print();
+    g.Print();
+  }
+}
+
+t : Boia = Boia();
 
 //c : Number = a.Add(b);
 
@@ -10,6 +27,15 @@ d : Number = (a + b + d) + (a + b + d);
 //c.Assign(a.Add(b));
 
 Main() {
-  //c = a + 2;
-  //c.Assign(a.Add(Number(2)));
+  //c = b + a;
+  c.Assign(b + a);
+  c.Print();
+  //c = (a + b);
+  //c = c + b;
+  //c.Print();
+
+  //d.Assign(c + a);
+  //d.Print();
+
+  t.De();
 }
