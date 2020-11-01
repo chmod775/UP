@@ -103,40 +103,15 @@ typedef enum {
 } e_token;
 
 /* ##### Types ##### */
-typedef struct _s_anytype s_anytype;
 typedef struct _s_statement s_statement;
 typedef struct _s_symbol s_symbol;
 typedef struct _s_class_instance s_class_instance;
+typedef struct _s_expression_operation s_expression_operation;
+
+typedef struct _s_symbol s_anytype;
 
 typedef struct {
-  s_anytype *key;
-  s_anytype *value;
-} s_dictionarytype;
-
-typedef struct {
-  s_anytype *items;
-} s_listtype;
-
-typedef union {
-  s_symbol *class;
-  s_dictionarytype *dictionary;
-  s_listtype *list;
-} u_anytype_content;
-
-typedef enum {
-  TYPE_ANY,
-  TYPE_CLASS,
-  TYPE_LIST,
-  TYPE_DICTIONARY
-} e_anytype_category;
-
-struct _s_anytype {
-  e_anytype_category category;
-  u_anytype_content content;
-};
-
-typedef struct {
-  s_anytype type;
+  s_anytype *type;
   u_int64_t data_index;
 } s_anyvalue;
 
@@ -198,7 +173,7 @@ typedef struct {
 } s_statementbody_constructor_def;
 
 typedef struct {
-  s_list *core_operations; // <s_expression_operation>
+  s_list *operations; // <s_expression_operation>
 } s_statementbody_expression;
 
 typedef union {
@@ -348,40 +323,24 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 /* ##### Expression ##### */
 typedef enum {
   OP_NULL = 0x00,
-
-  OP_Literal_Int = 0x10,
-  OP_Literal_Real,
-  OP_Literal_String,
-
-  OP_AccessField = 0x20,
-
-  OP_MethodCall = 0x30,
-
-  OP_ConstructorCall = 0x40
+  OP_AccessField,
+  OP_ConstructorCall,
+  OP_MethodCall
 } e_expression_operation_type;
 
-typedef struct {
-  s_symbol *target;
-  s_method_def *method;
-  s_list *arguments; // <s_symbol>
-} s_expressionpayload_call;
-
 typedef union {
-  int64_t integer;
-  double decimal;
-  char *string;
   s_symbol *field;
-  s_expressionpayload_call *call;
+  s_method_def *method;
 } u_expression_operation_payload;
 
-typedef struct {
+struct _s_expression_operation {
   e_expression_operation_type type;
   u_expression_operation_payload payload;
-} s_expression_operation;
+};
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type);
 
-void expression_Step(s_compiler *compiler, s_statement *statement, int level);
+s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
 /* ##### FIELD ##### */
@@ -397,7 +356,7 @@ typedef enum {
 
 typedef union {
   s_statement *statement;
-  void (*callback)(s_class_instance *self, s_list *args);
+  s_class_instance *(*callback)(s_class_instance *self, s_list *args);
 } u_methodbody_content;
 
 typedef struct {
@@ -407,7 +366,7 @@ typedef struct {
 
 struct _s_method_def {
   int hash;
-  s_anytype ret_type;
+  s_anytype *ret_type;
   s_list *arguments; // <s_symbol>
   s_methodbody body;
 };
@@ -420,14 +379,14 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
 /* ##### CLASS ##### */
 struct _s_class_instance {
   s_symbol *class;
-  void *data;
+  s_class_instance **data;
 };
 
 s_symbol *class_Create(char *name, s_scope *scope);
 
-s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *self, s_list *args), int nArguments, ...);
+s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_list *args), int nArguments, ...);
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...);
+s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...);
 
 s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args);
 
@@ -436,22 +395,8 @@ s_class_instance *class_CreateInstance(s_symbol *class);
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 
-/* ##### CORE structs ##### */
-typedef struct {
-  s_anyvalue value;
-  s_expression_operation *op;
-} core_expression_item;
-
-core_expression_item core_expression_item_Create(s_expression_operation *op, s_anyvalue value);
-
-define_stack(core_expression_item)
-
-typedef struct {
-  s_anyvalue content[32];
-} __core_method_arguments;
-
 /* ##### CORE libs ##### */
-s_anyvalue __core_exe_expression(s_statement *statement);
+s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement);
 
 void __core_class_createInstance(s_statement *statement);
 void __core_class_executeConstructor(s_statement *statement);

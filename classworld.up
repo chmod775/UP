@@ -1,7 +1,15 @@
-a : Number = Number(775);
+a : Number = Number();
 b : Number = Number(10);
-c : Number = a + b;
+c : Number = Number(1);
+d : Number = (a + b + d) + (a + b + d);
+
+//c : Number = a.Add(b);
+
+//c = a + b;
+
+//c.Assign(a.Add(b));
 
 Main() {
-  a.Add(2);
+  //c = a + 2;
+  //c.Assign(a.Add(Number(2)));
 }

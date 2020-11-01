@@ -778,32 +778,36 @@ s_expression_operation *expression_Emit(s_list *core_operations, e_expression_op
 #define emit(O, A) list_push(O, (A))
 
 
-void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
-  s_list *core_operations = statement->body.expression->core_operations;
-  
+s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, int level) {
+  s_list *operations = statement->body.expression->operations;
   s_expression_operation *op = NULL;
 
   // Unary operators
   if (token.type == TOKEN_Literal_Int) {
-    op = expression_Emit(core_operations, OP_Literal_Int);
-    op->payload.integer = token.content.integer;
+    // TODO
     match(statement->scope, TOKEN_Literal_Int);
+  } else if (token.type == TOKEN_Literal_Real) {
+    // TODO
+    match(statement->scope, TOKEN_Literal_Real);    
+  } else if (token.type == TOKEN_Literal_String) {
+    // TODO
+    match(statement->scope, TOKEN_Literal_String);
   } else if (token.type == TOKEN_Symbol) {
     s_symbol *symbol = token.content.symbol;
-    s_symbol *target_symbol = symbol;
-
     if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
+
+    s_symbol *target_symbol = symbol;
 
     match(statement->scope, TOKEN_Symbol);
 
-    while (token.type == '.') { // Descend parent hierarchy
+    // Descend parent hierarchy
+    while (token.type == '.') {
       s_scope *parent_scope = statement->scope;
 
       if (symbol->type == SYMBOL_CLASS) {
         parent_scope = symbol->body.class->scope;
       } else if (symbol->type == SYMBOL_FIELD) {
-        if (symbol->body.field->value.type.category != TYPE_CLASS) CERROR(compiler, "expression_Step", "Parent field is not of Class type.");
-        parent_scope = symbol->body.field->value.type.content.class->body.class->scope;
+        parent_scope = symbol->body.field->value.type->body.class->scope;
       } else {
         CERROR(compiler, "expression_Step", "Parent symbol is not valid.");
       }
@@ -817,17 +821,12 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     }
 
     if (token.type == '(') { // Call of Method or Constructor
-      s_expressionpayload_call *call_payload = NEW(s_expressionpayload_call);
-      call_payload->arguments = list_create();
-
       // Arguments
       match(statement->scope, '(');
 
       u_int64_t TEMP_arguments_count = 0;
       while (token.type != ')') {
         expression_Step(compiler, statement, TOKEN_Assign);
-
-        list_push(call_payload->arguments, list_pop(core_operations));
 
         if (token.type == ',')
           match(statement->scope, ',');
@@ -838,7 +837,7 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
       match(statement->scope, ')');
 
       if (symbol->type == SYMBOL_METHOD) { // Internal method call
-        op = expression_Emit(core_operations, OP_MethodCall);
+        op = expression_Emit(operations, OP_MethodCall);
 
         s_method_def *found_overload = list_read_first(symbol->body.method->overloads);
         while (found_overload != NULL) {
@@ -849,11 +848,9 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
 
         if (found_overload == NULL) CERROR(compiler, "expression_Step", "Method overload not found.");
 
-        call_payload->target = target_symbol;
-        call_payload->method = found_overload;
-        op->payload.call = call_payload;
+        op->payload.method = found_overload;
       } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
-        op = expression_Emit(core_operations, OP_ConstructorCall);
+        op = expression_Emit(operations, OP_ConstructorCall);
 
         s_method_def *found_constructor = list_read_first(symbol->body.class->constructors);
         while (found_constructor != NULL) {
@@ -864,24 +861,22 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
 
         if (found_constructor == NULL) CERROR(compiler, "expression_Step", "Constructor not found.");
 
-        call_payload->target = NULL;
-        call_payload->method = found_constructor;
-        op->payload.call = call_payload;
+        op->payload.method = found_constructor;
       } else {
         CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
       }
     } else {
-      op = expression_Emit(core_operations, OP_AccessField);
+      op = expression_Emit(operations, OP_AccessField);
       op->payload.field = symbol;
     }
   } else if (token.type == '(') {
     match(statement->scope, '(');
-    expression_Step(compiler, statement, TOKEN_Assign);
+    op = expression_Step(compiler, statement, TOKEN_Assign);
     match(statement->scope, ')');
   } else if (token.type == TOKEN_Lt) {
     match(statement->scope, TOKEN_Lt);
   } else if (token.type == ',') {
-    return;
+    return NULL;
   } else {
     CERROR(compiler, "expression_Step", "Bad expression.");
     exit(-1);
@@ -891,37 +886,40 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
   while (token.type >= level) {
     if (token.type == TOKEN_Assign) {
       match(statement->scope, TOKEN_Assign);
-      expression_Step(compiler, statement, TOKEN_Assign);
 
     } else if (token.type == TOKEN_Add) {
+      s_expression_operation *op_target = NEW(s_expression_operation);
+      op_target->type = op->type;
+      op_target->payload = op->payload;
+
       match(statement->scope, TOKEN_Add);
-      expression_Step(compiler, statement, TOKEN_Mul);
+      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Mul);
 
-      s_expression_operation *op_arg = list_pop(core_operations);
-      s_expression_operation *op_target = list_pop(core_operations);
+      s_list *args = list_create();
+      list_push(args, op_arg);
 
-      op = expression_Emit(core_operations, OP_MethodCall);
+      op = expression_Emit(operations, OP_MethodCall);
 
-      s_expressionpayload_call *call_payload = NEW(s_expressionpayload_call);
-      call_payload->arguments = list_create();
-      list_push(call_payload->arguments, op_arg);
-
-      op->payload.call = call_payload;
-
-      call_payload->target = op_target->payload.field;
-      call_payload->method = class_FindMethod(op_target->payload.field->body.field->value.type.content.class, "Add", call_payload->arguments);
+      if (op_target->type == OP_AccessField) {
+        op->payload.method = class_FindMethod(op_target->payload.field->body.field->value.type, "Add", args);
+      } else if ((op_target->type == OP_MethodCall) || (op_target->type == OP_ConstructorCall)) {
+        op->payload.method = class_FindMethod(op_target->payload.method->ret_type, "Add", args);
+      } else {
+        CERROR(compiler, "expression_Step", "Wrong operation type");
+      }
     } else if (token.type == TOKEN_Inc) {
       match(statement->scope, TOKEN_Inc);
       
     } else if (token.type == TOKEN_Lt) {
       match(statement->scope, TOKEN_Lt);
-      expression_Step(compiler, statement, TOKEN_Lt);
 
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
     }
   }
+
+  return op;
 }
 
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
@@ -930,8 +928,8 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
   ret->exe_cb = &__core_expression;
 
   ret->body.expression = NEW(s_statementbody_expression);
-  ret->body.expression->core_operations = list_create();
-
+  ret->body.expression->operations = list_create();
+  
   expression_Step(compiler, ret, TOKEN_Assign);
 
   return ret;
@@ -953,7 +951,7 @@ s_symbol *class_Create(char *name, s_scope *scope) {
   return symbol;
 }
 
-s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *self, s_list *args), int nArguments, ...) {
+s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_list *args), int nArguments, ...) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateConstructor", "Destination is not a Class.");
 
   va_list valist;
@@ -965,6 +963,9 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
 
   newMethod->body.type = METHODBODY_CALLBACK;
   newMethod->body.content.callback = cb;
+
+  // Constructor return itself
+  newMethod->ret_type = class;
 
   // Add arguments
   newMethod->arguments = list_create();
@@ -981,8 +982,7 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
 
       s_symbol *symbol_argument = symbol_CreateEmpty(SYMBOL_FIELD);
       symbol_argument->body.field = NEW(s_symbolbody_field);
-      symbol_argument->body.field->value.type.category = TYPE_CLASS;
-      symbol_argument->body.field->value.type.content.class = symbol_argumentType;
+      symbol_argument->body.field->value.type = symbol_argumentType;
 
       hash = hash * 147 + symbol_argumentType->hash;
 
@@ -1008,7 +1008,7 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
   va_end(valist);
 }
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...) {
+s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateMethod", "Destination is not a Class.");
   if (name == NULL) PERROR("class_CreateMethod", "Name cannot be null.");
 
@@ -1049,8 +1049,7 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
 
       s_symbol *symbol_argument = symbol_CreateEmpty(SYMBOL_FIELD);
       symbol_argument->body.field = NEW(s_symbolbody_field);
-      symbol_argument->body.field->value.type.category = TYPE_CLASS;
-      symbol_argument->body.field->value.type.content.class = symbol_argumentType;
+      symbol_argument->body.field->value.type = symbol_argumentType;
 
       hash = hash * 147 + symbol_argumentType->hash;
 
@@ -1065,8 +1064,7 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
     hash = hash * 147 + symbol_returnType->hash;
   }
 
-  newMethod->ret_type.category = TYPE_CLASS;
-  newMethod->ret_type.content.class = symbol_returnType;
+  newMethod->ret_type = symbol_returnType;
 
   newMethod->hash = hash;
 
@@ -1107,6 +1105,7 @@ s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args) {
 
   return found_overload;
 }
+
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
   // Only 3 definition statements are allowed in class body
@@ -1212,7 +1211,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
 
     list_push(newMethod->arguments, arg_statement->body.field_def->symbol);
 
-    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.content.class->hash;
+    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type->hash;
 
     if (token.type == ',')
       match(ret_statement->scope, ',');
@@ -1284,7 +1283,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 
     list_push(newMethod->arguments, arg_statement->body.field_def->symbol);
 
-    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type.content.class->hash;
+    hash = hash * 147 + arg_statement->body.field_def->symbol->body.field->value.type->hash;
 
     if (token.type == ',')
       match(ret_statement->scope, ',');
@@ -1295,10 +1294,9 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   if (token.type == ':') {
     match(parent->scope, ':');
     // Return type
-    s_anytype *type = compile_FieldType(compiler, parent);
-    newMethod->ret_type = *type;
+    newMethod->ret_type = compile_FieldType(compiler, parent);
 
-    hash = hash * 147 + type->content.class->hash;
+    hash = hash * 147 + newMethod->ret_type->hash;
   }
 
   newMethod->hash = hash;
@@ -1330,9 +1328,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 }
 
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
-  s_anytype *ret = NEW(s_anytype);
-
-  ret->category = TYPE_ANY;
+  s_anytype *ret = NULL;
 
   if (token.type == TOKEN_Symbol) {
     // Class
@@ -1340,8 +1336,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
     if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
-    ret->category = TYPE_CLASS;
-    ret->content.class = symbol;
+    ret = symbol;
 
     match(statement->scope, TOKEN_Symbol);
 
@@ -1354,8 +1349,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
       if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
       if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
 
-      ret->category = TYPE_CLASS;
-      ret->content.class = symbol;
+      ret = symbol;
 
       match(symbol_body->scope, TOKEN_Symbol);
     }
@@ -1363,32 +1357,18 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     // List
     match(statement->scope, '[');
 
-    s_listtype *ltype = NEW(s_listtype);
-    ltype->items = compile_FieldType(compiler, statement);
-
-    ret->category = TYPE_LIST;
-    ret->content.list = ltype;
+    // TODO
 
     match(statement->scope, ']');
   } else if (token.type == '{') {
     // Dictionary
     match(statement->scope, '{');
 
-    s_dictionarytype *dtype = NEW(s_dictionarytype);
-
-    dtype->key = compile_FieldType(compiler, statement);
-
-    if (dtype->key->category != TYPE_CLASS) {
-      CERROR(compiler, "compile_FieldType", "Dictionary key can only be of primary type");
-      exit(-1);
-    }
+    // TODO
 
     match(statement->scope, ',');
 
-    dtype->value = compile_FieldType(compiler, statement);
-
-    ret->category = TYPE_DICTIONARY;
-    ret->content.dictionary = dtype;
+    // TODO
 
     match(statement->scope, '}');
   } else {
@@ -1417,8 +1397,7 @@ s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *paren
   name->body.field = NEW(s_symbolbody_field);
   name->type = SYMBOL_FIELD;
 
-  s_anytype *type = compile_FieldType(compiler, ret);
-  name->body.field->value.type = *type;
+  name->body.field->value.type = compile_FieldType(compiler, ret);
   name->body.field->init_expression = NULL;
 
   if (token.type == TOKEN_Assign) {
@@ -1579,18 +1558,6 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
 #undef token
 
 /* ##### CORE Libs ##### */
-core_expression_item core_expression_item_Create(s_expression_operation *op, s_anyvalue value) {
-  core_expression_item ret;
-  ret.op = op;
-  ret.value = value;
-  return ret;
-}
-
-void __core_print(s_stack__core_expression_item *stack) {
-  s_anyvalue a = stack_pop__core_expression_item(stack).value;
-  // T O D O
-}
-
 void __core_exe_assign(s_symbol *symbol, s_anyvalue item) {
   if (symbol->type != SYMBOL_FIELD) { PERROR("__core_assign", "Wrong symbol type"); exit(1); }
 
@@ -1610,24 +1577,14 @@ void __core_exe_assign(s_symbol *symbol, s_anyvalue item) {
 
 
 
-s_anyvalue __core_exe_expression(s_statement *statement) {
 
-}
 
 
 void __core_expression(s_statement *statement) {
-  s_anyvalue exp_result = __core_exe_expression(statement);
 }
 
 void __core_field_def(s_statement *statement) {
-  if (statement->type != STATEMENT_FIELD_DEF) { PERROR("__core_field_def", "Wrong statement type"); exit(1); }
 
-  s_symbol *symbol = statement->body.field_def->symbol;
-
-  if (symbol->body.field->init_expression != NULL) {
-    s_anyvalue exp_result = __core_exe_expression(symbol->body.field->init_expression);
-    __core_exe_assign(symbol, exp_result);
-  }
 }
 
 void __core_call_method(s_statement *statement) {}
@@ -1652,7 +1609,7 @@ void __core_while(s_statement *statement) {
 
   s_statementbody_while *statement_body = statement->body._while;
 
-  s_anyvalue check_result = __core_exe_expression(statement_body->check);
+  //s_anyvalue check_result = __core_exe_expression(statement_body->check);
   /*
   while (check_result.content) {
     __core_exe_statement(statement_body->loop);
@@ -1663,6 +1620,57 @@ void __core_while(s_statement *statement) {
 
 void __core_new_class_instance() {}
 
+s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement) {
+  if (statement->type != STATEMENT_EXPRESSION) PERROR("__core_exe_expression", "Wrong statement type");
+
+  s_list *operations = statement->body.expression->operations;
+
+  s_list *stack = list_create(); // <s_class_instance>
+
+  s_expression_operation *op = list_read_first(operations);
+  while (op != NULL) {
+    if (op->type == OP_AccessField) {
+      s_class_instance *value = self->data[op->payload.field->body.field->value.data_index];
+      list_push(stack, value);
+    } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
+      s_class_instance *value = NULL;
+
+      // Pop target
+      s_class_instance *target = NULL;
+      if (op->type == OP_MethodCall)
+        target = list_pop(stack);
+
+      // Pop arguments from stack
+      s_list *args = list_create();
+      u_int64_t args_count = op->payload.method->arguments->items_count;
+
+      u_int64_t arg_idx;
+      for (arg_idx = 0; arg_idx < args_count; arg_idx++) {
+        s_class_instance *arg_value = list_pop(stack);
+
+      }
+
+      // Call methods
+      if (op->payload.method->body.type == METHODBODY_STATEMENT) {
+
+      } else if (op->payload.method->body.type == METHODBODY_CALLBACK) {
+        value = op->payload.method->body.content.callback(target, args);
+      } else {
+        PERROR("__core_exe_expression", "Method type error.");
+      }
+
+      list_push(stack, value);
+    } else {
+      PERROR("__core_exe_expression", "Operation not allowed.");
+    }
+
+    op = list_read_next(operations);
+  }
+
+  if (stack->items_count > 1) PERROR("__core_exe_expression", "Stack error.");
+  return list_pop(stack);
+}
+
 s_class_instance *class_CreateInstance(s_symbol *class) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateInstance", "Wrong statement type");
 
@@ -1670,12 +1678,13 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   instance->class = class;
 
   // Allocate data space
-  instance->data = malloc(sizeof(void *) * instance->class->body.class->fields->items_count);
+  instance->data = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
 
   // Initialize fields
   s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
   while (field_symbol != NULL) {
-    
+    s_class_instance *init_value = __core_exe_expression(instance, field_symbol->body.field->init_expression);
+    //instance->data[field_symbol->body.field->value.data_index] = NULL;
 
     field_symbol = list_read_next(instance->class->body.class->fields);
   }
@@ -1684,17 +1693,26 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 }
 
 /* ##### STDLIB 3rd avenue ##### */
-void number_Constructor(s_class_instance *self, s_list *args) {
+s_symbol *numberClass = NULL;
 
+s_class_instance *number_Constructor(s_class_instance *self, s_list *args) {
+  s_class_instance *ret = class_CreateInstance(numberClass);
+  ret->data = malloc(sizeof(u_int16_t));
+  return ret;
 }
 
-void number_Add_Number(s_class_instance *self, s_list *args) {
+s_class_instance *number_Add_Number(s_class_instance *self, s_list *args) {
+  s_class_instance *ret = class_CreateInstance(numberClass);
 
+
+
+  return ret;
 }
 
 void stdlib_Init(s_compiler *compiler) {
-  s_symbol *numberClass = class_Create("Number", compiler->rootScope);
+  numberClass = class_Create("Number", compiler->rootScope);
   // class_CreateField(numberClass, "raw", NULL, sizeof(u_int64_t));
+  class_CreateConstructor(numberClass, &number_Constructor, 0);
   class_CreateConstructor(numberClass, &number_Constructor, 1, NULL);
   // class_CreateConstructor(numberClass, &number_Constructor, 1, "Number");
   // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
