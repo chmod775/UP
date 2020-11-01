@@ -273,6 +273,7 @@ typedef struct _s_symbol {
 char *symbol_GetCleanName(s_symbol *symbol);
 
 s_symbol *symbol_Create(char *name, e_symboltype type, int length);
+s_symbol *symbol_CreateEmpty(e_symboltype type);
 s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
 
 s_symbol *symbol_Find(char *name, s_parlist *symbols);
@@ -280,6 +281,8 @@ s_symbol *symbol_Find(char *name, s_parlist *symbols);
 /* ##### Scope ##### */
 s_scope *scope_Create(s_scope *parent);
 s_scope *scope_CreateAsRoot();
+
+void scope_AddSymbol(s_scope *scope, s_symbol *symbol);
 
 void scope_Destroy(s_scope *scope);
 
@@ -357,12 +360,18 @@ typedef enum {
   OP_ConstructorCall = 0x40
 } e_expression_operation_type;
 
+typedef struct {
+  s_symbol *target;
+  s_method_def *method;
+  s_list *arguments; // <s_symbol>
+} s_expressionpayload_call;
+
 typedef union {
   int64_t integer;
   double decimal;
   char *string;
   s_symbol *field;
-  s_method_def *method;
+  s_expressionpayload_call *call;
 } u_expression_operation_payload;
 
 typedef struct {
@@ -405,8 +414,6 @@ struct _s_method_def {
 
 int method_ComputeHash(s_method_def *method);
 
-
-
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
 s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent);
 
@@ -420,7 +427,11 @@ s_symbol *class_Create(char *name, s_scope *scope);
 
 s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *self, s_list *args), int nArguments, ...);
 
-void class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *self, s_list *args));
+s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...);
+
+s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args);
+
+s_class_instance *class_CreateInstance(s_symbol *class);
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);

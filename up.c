@@ -174,6 +174,7 @@ void *list_pop(s_list *l) { // Pop item from the end
     ret = l->head_item->value;
     free(l->head_item);
     l->head_item = NULL;
+    l->items_count--;
     return ret;
   }
 
@@ -187,6 +188,7 @@ void *list_pop(s_list *l) { // Pop item from the end
   free(current->next);
   current->next = NULL;
 
+  l->items_count--;
   return ret;
 }
 
@@ -290,6 +292,21 @@ s_symbol *symbol_Create(char *name, e_symboltype type, int length) {
   return ret;
 }
 
+s_symbol *symbol_CreateEmpty(e_symboltype type) {
+  s_symbol *ret = NEW(s_symbol);
+
+  ret->hash = 0;
+  ret->name = NULL;
+  ret->length = 0;
+  ret->type = type;
+
+  ret->isUppercase = false;
+  ret->isFullcase = false;
+  ret->startsUnderscore = false;
+
+  return ret;  
+}
+
 s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
   s_symbol *ret = symbol_Create(keyword, SYMBOL_KEYWORD, -1);
 
@@ -330,21 +347,24 @@ s_scope *scope_CreateAsRoot() {
   s_scope *ret = scope_Create(NULL);
 
   // Init symbols with base keywords
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("NULL", TOKEN_NULL));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("if", TOKEN_If));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("else", TOKEN_Else));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("return", TOKEN_Return));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("while", TOKEN_While));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("for", TOKEN_For));
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("switch", TOKEN_Switch));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("NULL", TOKEN_NULL));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("if", TOKEN_If));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("else", TOKEN_Else));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("return", TOKEN_Return));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("while", TOKEN_While));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("for", TOKEN_For));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("switch", TOKEN_Switch));
 
-  parlist_push(ret->symbols, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
 
   return ret;
 }
 
-char buffer[1000];
+void scope_AddSymbol(s_scope *scope, s_symbol *symbol) {
+  parlist_push(scope->symbols, symbol);
+}
 
+char buffer[1000];
 char *scope_Print(s_scope *scope) {
   char *buffer_ptr = buffer;
 
@@ -422,7 +442,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
 
       // No symbol found, create one
       s_symbol *new_symbol = symbol_Create(last_pos, SYMBOL_NOTDEFINED, src - last_pos);
-      parlist_push(scope->symbols, new_symbol);
+      scope_AddSymbol(scope, new_symbol);
 
       ret(TOKEN_Symbol, new_symbol, symbol);
     }
@@ -732,7 +752,7 @@ void compiler_Execute(s_compiler *compiler) {
 
   compile_ClassBody(compiler, compiler->rootStatement);
 
-  //__core_exe_statement(compiler->rootStatement);
+  class_CreateInstance(compiler->rootStatement->body.class_def->symbol);
 }
 
 void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
@@ -770,6 +790,8 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     match(statement->scope, TOKEN_Literal_Int);
   } else if (token.type == TOKEN_Symbol) {
     s_symbol *symbol = token.content.symbol;
+    s_symbol *target_symbol = symbol;
+
     if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
 
     match(statement->scope, TOKEN_Symbol);
@@ -795,12 +817,17 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
     }
 
     if (token.type == '(') { // Call of Method or Constructor
+      s_expressionpayload_call *call_payload = NEW(s_expressionpayload_call);
+      call_payload->arguments = list_create();
+
       // Arguments
       match(statement->scope, '(');
 
       u_int64_t TEMP_arguments_count = 0;
       while (token.type != ')') {
         expression_Step(compiler, statement, TOKEN_Assign);
+
+        list_push(call_payload->arguments, list_pop(core_operations));
 
         if (token.type == ',')
           match(statement->scope, ',');
@@ -822,7 +849,9 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
 
         if (found_overload == NULL) CERROR(compiler, "expression_Step", "Method overload not found.");
 
-        op->payload.method = found_overload;
+        call_payload->target = target_symbol;
+        call_payload->method = found_overload;
+        op->payload.call = call_payload;
       } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
         op = expression_Emit(core_operations, OP_ConstructorCall);
 
@@ -835,12 +864,14 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
 
         if (found_constructor == NULL) CERROR(compiler, "expression_Step", "Constructor not found.");
 
-        op->payload.method = found_constructor;
+        call_payload->target = NULL;
+        call_payload->method = found_constructor;
+        op->payload.call = call_payload;
       } else {
         CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
       }
     } else {
-      op = expression_Emit(core_operations, OP_ConstructorCall);
+      op = expression_Emit(core_operations, OP_AccessField);
       op->payload.field = symbol;
     }
   } else if (token.type == '(') {
@@ -866,6 +897,19 @@ void expression_Step(s_compiler *compiler, s_statement *statement, int level) {
       match(statement->scope, TOKEN_Add);
       expression_Step(compiler, statement, TOKEN_Mul);
 
+      s_expression_operation *op_arg = list_pop(core_operations);
+      s_expression_operation *op_target = list_pop(core_operations);
+
+      op = expression_Emit(core_operations, OP_MethodCall);
+
+      s_expressionpayload_call *call_payload = NEW(s_expressionpayload_call);
+      call_payload->arguments = list_create();
+      list_push(call_payload->arguments, op_arg);
+
+      op->payload.call = call_payload;
+
+      call_payload->target = op_target->payload.field;
+      call_payload->method = class_FindMethod(op_target->payload.field->body.field->value.type.content.class, "Add", call_payload->arguments);
     } else if (token.type == TOKEN_Inc) {
       match(statement->scope, TOKEN_Inc);
       
@@ -904,13 +948,13 @@ s_symbol *class_Create(char *name, s_scope *scope) {
   symbol->body.class->methods = list_create();
   symbol->body.class->constructors = list_create();
 
-  parlist_push(scope->symbols, symbol);
+  scope_AddSymbol(scope, symbol);
 
   return symbol;
 }
 
 s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *self, s_list *args), int nArguments, ...) {
-  if (class->type != SYMBOL_CLASS) PERROR("class_CreateConstructor", "Symbol is not a Class.");
+  if (class->type != SYMBOL_CLASS) PERROR("class_CreateConstructor", "Destination is not a Class.");
 
   va_list valist;
   va_start(valist, nArguments);
@@ -932,12 +976,17 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
       list_push(newMethod->arguments, NULL);
       hash = hash * 147 + 255;
     } else {
-      s_symbol *foundType = symbol_Find(typeClassName, class->body.class->scope->symbols);
-      if (foundType == NULL) PERROR("class_CreateConstructor", "Class type not found.");
+      s_symbol *symbol_argumentType = symbol_Find(typeClassName, class->body.class->scope->symbols);
+      if (symbol_argumentType == NULL) PERROR("class_CreateConstructor", "Class type not found.");
 
-      hash = hash * 147 + foundType->hash;
+      s_symbol *symbol_argument = symbol_CreateEmpty(SYMBOL_FIELD);
+      symbol_argument->body.field = NEW(s_symbolbody_field);
+      symbol_argument->body.field->value.type.category = TYPE_CLASS;
+      symbol_argument->body.field->value.type.content.class = symbol_argumentType;
 
-      list_push(newMethod->arguments, foundType);
+      hash = hash * 147 + symbol_argumentType->hash;
+
+      list_push(newMethod->arguments, symbol_argument);
     }
   }
 
@@ -957,6 +1006,106 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
   list_push(class->body.class->constructors, newMethod);
 
   va_end(valist);
+}
+
+s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...) {
+  if (class->type != SYMBOL_CLASS) PERROR("class_CreateMethod", "Destination is not a Class.");
+  if (name == NULL) PERROR("class_CreateMethod", "Name cannot be null.");
+
+  s_symbol *symbol_name = symbol_Find(name, class->body.class->scope->symbols);
+  if (symbol_name == NULL) {
+    // Method symbol not found, create one
+    symbol_name = symbol_Create(name, SYMBOL_METHOD, -1);
+    symbol_name->body.method = NEW(s_symbolbody_method);
+    symbol_name->body.method->overloads = list_create();
+    // Add to class scope
+    scope_AddSymbol(class->body.class->scope, symbol_name);
+  }
+  
+  if (!symbol_name->isUppercase) PERROR("class_CreateMethod", "Method name must start uppercase.");
+
+  va_list valist;
+  va_start(valist, nArguments);
+
+  int hash = symbol_name->hash * 147;
+
+  s_method_def *newMethod = NEW(s_method_def);
+
+  newMethod->body.type = METHODBODY_CALLBACK;
+  newMethod->body.content.callback = cb;
+
+  // Add arguments
+  newMethod->arguments = list_create();
+  int i;
+  for (i = 0; i < nArguments; i++) {
+    char *typeClassName = va_arg(valist, char *);
+
+    if (typeClassName == NULL) { // Literal only, used for Primary classes like Number, String
+      list_push(newMethod->arguments, NULL);
+      hash = hash * 147 + 255;
+    } else {
+      s_symbol *symbol_argumentType = symbol_Find(typeClassName, class->body.class->scope->symbols);
+      if (symbol_argumentType == NULL) PERROR("class_CreateMethod", "Class type not found.");
+
+      s_symbol *symbol_argument = symbol_CreateEmpty(SYMBOL_FIELD);
+      symbol_argument->body.field = NEW(s_symbolbody_field);
+      symbol_argument->body.field->value.type.category = TYPE_CLASS;
+      symbol_argument->body.field->value.type.content.class = symbol_argumentType;
+
+      hash = hash * 147 + symbol_argumentType->hash;
+
+      list_push(newMethod->arguments, symbol_argument);
+    }
+  }
+
+  // Find return type
+  s_symbol *symbol_returnType = NULL;
+  if (returnType != NULL) {
+    symbol_returnType = symbol_Find(returnType, class->body.class->scope->symbols);
+    hash = hash * 147 + symbol_returnType->hash;
+  }
+
+  newMethod->ret_type.category = TYPE_CLASS;
+  newMethod->ret_type.content.class = symbol_returnType;
+
+  newMethod->hash = hash;
+
+  // Check already defined Method overload
+  s_method_def *m = list_read_first(symbol_name->body.method->overloads);
+  while (m != NULL) {
+    if (hash == m->hash) {
+      // ### TODO: Deep check for memory content, not only hash
+      PERROR("class_CreateConstructor", "Constructor overload already defined.");
+    }
+    m = list_read_next(symbol_name->body.method->overloads);
+  }
+
+  // Push to overloads
+  list_push(symbol_name->body.method->overloads, newMethod);
+
+  // Add to class methods
+  list_push(class->body.class->methods, newMethod);
+
+  va_end(valist);
+}
+
+s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args) {
+  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethod", "Destination is not a Class.");
+  if (name == NULL) PERROR("class_FindMethod", "Name cannot be null.");
+
+  s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
+  if (found_symbol == NULL) PERROR("class_FindMethod", "Symbol does not exists.");
+
+  s_method_def *found_overload = list_read_first(found_symbol->body.method->overloads);
+  while (found_overload != NULL) {
+    if (found_overload->arguments->items_count == args->items_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
+      break;
+    found_overload = list_read_next(found_symbol->body.method->overloads);
+  }
+
+  if (found_overload == NULL) PERROR("class_FindMethod", "Method overload not found.");
+
+  return found_overload;
 }
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
@@ -1173,8 +1322,6 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   }
 
   match(parent->scope, '}');
-
-  list_push(parent->body.class_def->symbol->body.class->fields, name);
 
   // Push to overloads
   list_push(name->body.method->overloads, newMethod);
@@ -1464,39 +1611,7 @@ void __core_exe_assign(s_symbol *symbol, s_anyvalue item) {
 
 
 s_anyvalue __core_exe_expression(s_statement *statement) {
-  /*
-  s_stack__core_expression_item stack = stack_create__core_expression_item(50);
-  stack.ptr = 0;
 
-  s_list *core_operations = statement->body.expression->core_operations;
-
-  s_expression_operation *op = list_read_first(core_operations);
-
-  do {
-    if (op->token->type == TOKEN_Literal_Int) {
-      //stack_push__core_expression_item(&stack, core_expression_item_Create(op, s_anyvalue_createPrimary(TYPE_Int64, op->token->value.integer)));
-    } else if (op->token->type == TOKEN_Symbol) {
-      if (op->token->content.symbol->type == SYMBOL_FIELD) {
-        stack_push__core_expression_item(&stack, core_expression_item_Create(op, op->token->content.symbol->body.field->value));
-      } else if (op->token->content.symbol->type == SYMBOL_METHOD) {
-      } else if (op->token->content.symbol->type == SYMBOL_CLASS) {
-      } else {
-        PERROR("__core_exe_expression", "Symbol type not allowed for expression");
-      }
-    } else {
-      void (*cb)(s_stack__core_expression_item *stack) = op->token->content.any;
-      if (cb)
-        cb(&stack);
-    }
-    op = list_read_next(core_operations);
-  } while (op != NULL);
-
-  s_anyvalue ret = stack_pop__core_expression_item(&stack).value;
-
-  stack_free__core_expression_item(stack);
-
-  return ret;
-  */
 }
 
 
@@ -1548,8 +1663,32 @@ void __core_while(s_statement *statement) {
 
 void __core_new_class_instance() {}
 
+s_class_instance *class_CreateInstance(s_symbol *class) {
+  if (class->type != SYMBOL_CLASS) PERROR("class_CreateInstance", "Wrong statement type");
+
+  s_class_instance *instance = NEW(s_class_instance);
+  instance->class = class;
+
+  // Allocate data space
+  instance->data = malloc(sizeof(void *) * instance->class->body.class->fields->items_count);
+
+  // Initialize fields
+  s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
+  while (field_symbol != NULL) {
+    
+
+    field_symbol = list_read_next(instance->class->body.class->fields);
+  }
+
+  return instance;
+}
+
 /* ##### STDLIB 3rd avenue ##### */
 void number_Constructor(s_class_instance *self, s_list *args) {
+
+}
+
+void number_Add_Number(s_class_instance *self, s_list *args) {
 
 }
 
@@ -1561,7 +1700,7 @@ void stdlib_Init(s_compiler *compiler) {
   // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
   // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
   // class_CreateMethod(numberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
-  // class_CreateMethod(numberClass, "Add", &number_Add_Number_Number, 2, "Number", "Number");
+  class_CreateMethod(numberClass, "Add", &number_Add_Number, "Number", 1, "Number");
 }
 
 
@@ -1580,7 +1719,7 @@ int main() {
 " UP Interpreter  v0.3 \n";
   printf("%s", intro);
 
-  char *srcFilename = "helloworld.up";
+  char *srcFilename = "classworld.up";
 
 
   // Compiler

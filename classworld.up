@@ -1,0 +1,7 @@
+a : Number = Number(775);
+b : Number = Number(10);
+c : Number = a + b;
+
+Main() {
+  a.Add(2);
+}

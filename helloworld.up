@@ -7,6 +7,7 @@ Test {
 pp : Test = Test(1);
 
 r:Number = Number(775);
+
 // Using basic types
     m    :      Number       =5; // Hello
 
