@@ -28,6 +28,11 @@ t : Boia = Boia();
 
 Main() {
   //c = b + a;
+
+  while (c) {
+    c.Print();
+  }
+
   c.Assign(b + a);
   c.Print();
   //c = (a + b);

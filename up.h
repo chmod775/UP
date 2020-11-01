@@ -409,7 +409,7 @@ void __core_exe_statement(s_class_instance *self, s_statement *statement);
 
 void __core_if(s_statement *statement);
 void __core_for(s_statement *statement);
-void __core_while(s_statement *statement);
+void __core_while(s_class_instance *self, s_statement *statement);
 
 // Symbols actions
 void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
