@@ -839,6 +839,13 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   // Unary operators
   if (token.type == TOKEN_Literal_Int) {
     // TODO
+    s_class_instance *number = class_CreateInstance(LIB_NumberClass);
+    number->data = malloc(sizeof(u_int64_t));
+    number->data = token.content.integer;
+
+    op = expression_Emit(operations, OP_UseTemporaryInstance);
+    op->payload.temporary = number;
+
     match(statement->scope, TOKEN_Literal_Int);
   } else if (token.type == TOKEN_Literal_Real) {
     // TODO
@@ -932,8 +939,6 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     match(statement->scope, '(');
     op = expression_Step(compiler, statement, TOKEN_Assign);
     match(statement->scope, ')');
-  } else if (token.type == TOKEN_Lt) {
-    match(statement->scope, TOKEN_Lt);
   } else if (token.type == ',') {
     return NULL;
   } else {
@@ -982,8 +987,25 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       match(statement->scope, TOKEN_Inc);
       
     } else if (token.type == TOKEN_Lt) {
-      match(statement->scope, TOKEN_Lt);
+      s_expression_operation *op_target = NEW(s_expression_operation);
+      op_target->type = op->type;
+      op_target->payload = op->payload;
 
+      match(statement->scope, TOKEN_Lt);
+      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Shl);
+
+      s_list *args = list_create();
+      list_push(args, op_arg);
+
+      op = expression_Emit(operations, OP_MethodCall);
+
+      if (op_target->type == OP_AccessField) {
+        op->payload.method = class_FindMethod(op_target->payload.field->body.field->value.type, "Less", args);
+      } else if ((op_target->type == OP_MethodCall) || (op_target->type == OP_ConstructorCall)) {
+        op->payload.method = class_FindMethod(op_target->payload.method->ret_type, "Less", args);
+      } else {
+        CERROR(compiler, "expression_Step", "Wrong operation type");
+      }
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1024,7 +1046,7 @@ s_symbol *class_Create(char *name, s_scope *scope) {
   return symbol;
 }
 
-s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_list *args), int nArguments, ...) {
+s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), int nArguments, ...) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateConstructor", "Destination is not a Class.");
 
   va_list valist;
@@ -1081,7 +1103,7 @@ s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s
   va_end(valist);
 }
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...) {
+s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateMethod", "Destination is not a Class.");
   if (name == NULL) PERROR("class_CreateMethod", "Name cannot be null.");
 
@@ -1705,18 +1727,18 @@ void __core_while(s_class_instance *self, s_statement *statement) {
 
   s_statementbody_while *statement_body = statement->body._while;
 
-  //s_anyvalue check_result = __core_exe_expression(statement_body->check);
-  /*
-  while (check_result.content) {
-    __core_exe_statement(statement_body->loop);
-    check_result = __core_exe_expression(statement_body->check);
+  s_class_instance *check_result = __core_exe_expression(self, statement_body->check);
+
+  while (check_result->data) {
+    __core_exe_statement(self, statement_body->loop);
+    check_result = __core_exe_expression(self, statement_body->check);
   }
-  */
+  
 }
 
 void __core_new_class_instance() {}
 
-s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_list *args) {
+s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance **args) {
 	PANALYSIS("__core_exe_method");
   if (method->body.type == METHODBODY_STATEMENT) {
     __core_exe_statement(self, method->body.content.statement);
@@ -1734,36 +1756,39 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
 
   s_list *operations = statement->body.expression->operations;
 
-  s_list *stack = list_create(); // <s_class_instance>
+  s_stack__s_class_instance_ptr stack = stack_create__s_class_instance_ptr(256);
+
+  s_class_instance *args[32];
 
   s_expression_operation *op = list_read_first(operations);
   while (op != NULL) {
     if (op->type == OP_AccessField) {
       s_class_instance *value = self->data[op->payload.field->body.field->value.data_index];
-      list_push(stack, value);
+      stack_push__s_class_instance_ptr(&stack, value);
+    } else if (op->type == OP_UseTemporaryInstance) {
+      stack_push__s_class_instance_ptr(&stack, op->payload.temporary);
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       s_class_instance *value = NULL;
 
       // Pop arguments from stack
-      s_list *args = list_create();
       u_int64_t args_count = op->payload.method->arguments->items_count;
 
       u_int64_t arg_idx;
       for (arg_idx = 0; arg_idx < args_count; arg_idx++) {
-        s_class_instance *arg_value = list_pop(stack);
-        list_push(args, arg_value);
+        s_class_instance *arg_value = stack_pop__s_class_instance_ptr(&stack);
+        args[arg_idx] = arg_value;
       }
 
       // Pop target and call method
       s_class_instance *target = NULL;
       if (op->type == OP_MethodCall) {
-        target = list_pop(stack);
+        target = stack_pop__s_class_instance_ptr(&stack);
         value = __core_exe_method(target, op->payload.method, args);
-        list_push(stack, value);
+        stack_push__s_class_instance_ptr(&stack, value);
       } else if (op->type == OP_ConstructorCall) {
         target = class_CreateInstance(op->payload.method->ret_type);
         __core_exe_method(target, op->payload.method, args);
-        list_push(stack, target);
+        stack_push__s_class_instance_ptr(&stack, target);
       }
     } else {
       PERROR("__core_exe_expression", "Operation not allowed.");
@@ -1772,8 +1797,8 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
     op = list_read_next(operations);
   }
 
-  if (stack->items_count > 1) PERROR("__core_exe_expression", "Stack error.");
-  return list_pop(stack);
+  if (stack.ptr > 1) PERROR("__core_exe_expression", "Stack error.");
+  return stack_pop__s_class_instance_ptr(&stack);
 }
 
 s_class_instance *class_CreateInstance(s_symbol *class) {
@@ -1799,53 +1824,71 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 }
 
 /* ##### STDLIB 3rd avenue ##### */
-s_symbol *numberClass = NULL;
-
-s_class_instance *number_Constructor(s_class_instance *self, s_list *args) {
+s_class_instance *number_Constructor(s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
-  self->data = malloc(sizeof(u_int16_t));
-  self->data = 0x775;
+  self->data = malloc(sizeof(u_int64_t));
+  self->data = 0;
   return self;
 }
-
-s_class_instance *number_Add_Number(s_class_instance *self, s_list *args) {
-	PANALYSIS("number_Add_Number");
-  s_class_instance *ret = class_CreateInstance(numberClass);
-
-  s_class_instance *arg_B = list_read_first(args);
-
-  ret->data = malloc(sizeof(u_int16_t));
-  ret->data = (u_int16_t)self->data + (u_int16_t)arg_B->data;
-
-  return ret;
-}
-
-s_class_instance *number_Assign_Number(s_class_instance *self, s_list *args) {
-	PANALYSIS("number_Assign_Number");
-  s_class_instance *arg_B = list_read_first(args);
+s_class_instance *number_Constructor_Number(s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Constructor");
+  self->data = malloc(sizeof(u_int64_t));
+  s_class_instance *arg_B = args[0];
   self->data = arg_B->data;
   return self;
 }
 
-s_class_instance *number_Assign_Print(s_class_instance *self, s_list *args) {
+s_class_instance *number_Add_Number(s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Add_Number");
+  s_class_instance *ret = class_CreateInstance(LIB_NumberClass);
+
+  s_class_instance *arg_B = args[0];
+
+  ret->data = malloc(sizeof(u_int64_t));
+  ret->data = (u_int64_t)self->data + (u_int64_t)arg_B->data;
+
+  return ret;
+}
+
+s_class_instance *number_Less_Number(s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Less_Number");
+  s_class_instance *ret = class_CreateInstance(LIB_NumberClass);
+
+  s_class_instance *arg_B = args[0];
+
+  ret->data = malloc(sizeof(u_int64_t));
+  ret->data = (u_int64_t)self->data < (u_int64_t)arg_B->data;
+
+  return ret;
+}
+
+s_class_instance *number_Assign_Number(s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Assign_Number");
+  s_class_instance *arg_B = args[0];
+  self->data = arg_B->data;
+  return self;
+}
+
+s_class_instance *number_Assign_Print(s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Assign_Print");
-  printf("%X\n", self->data);
+  printf("%lu\n", self->data);
   return NULL;
 }
 
 void stdlib_Init(s_compiler *compiler) {
 	PANALYSIS("stdlib_Init");
-  numberClass = class_Create("Number", compiler->rootScope);
-  // class_CreateField(numberClass, "raw", NULL, sizeof(u_int64_t));
-  class_CreateConstructor(numberClass, &number_Constructor, 0);
-  class_CreateConstructor(numberClass, &number_Constructor, 1, NULL);
-  // class_CreateConstructor(numberClass, &number_Constructor, 1, "Number");
-  // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
-  // class_CreateMethod(numberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
-  // class_CreateMethod(numberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
-  class_CreateMethod(numberClass, "Add", &number_Add_Number, "Number", 1, "Number");
-  class_CreateMethod(numberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
-  class_CreateMethod(numberClass, "Print", &number_Assign_Print, NULL, 0);
+  LIB_NumberClass = class_Create("Number", compiler->rootScope);
+  // class_CreateField(LIB_NumberClass, "raw", NULL, sizeof(u_int64_t));
+  class_CreateConstructor(LIB_NumberClass, &number_Constructor, 0);
+  class_CreateConstructor(LIB_NumberClass, &number_Constructor_Number, 1, NULL);
+  // class_CreateConstructor(LIB_NumberClass, &number_Constructor, 1, "Number");
+  // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
+  // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
+  // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
+  class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Print", &number_Assign_Print, NULL, 0);
 }
 
 

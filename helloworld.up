@@ -24,6 +24,7 @@ Add(a : Number, b : Number = 1) : Number {
 Add(a : Number, b : Number, c : Number) : Number {
     a + c;
     s3 = a;
+    return a;
 }
 
 Actuator {

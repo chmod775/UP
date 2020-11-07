@@ -91,6 +91,31 @@ T stack_pop__##T(s_stack__##T *s) { \
   return s->content[s->ptr]; \
 } \
 
+#define define_stack(T, N) \
+typedef struct { \
+  T *content; \
+  u_int64_t ptr; \
+  u_int64_t size; \
+} s_stack__##N; \
+s_stack__##N stack_create__##N(int size) { \
+  s_stack__##N ret; \
+  ret.size = size; \
+  ret.ptr = 0; \
+  ret.content = (T *)malloc(size * sizeof(T)); \
+  return ret; \
+} \
+void stack_free__##N(s_stack__##N s) { \
+  free(s.content); \
+} \
+void stack_push__##N(s_stack__##N *s, T value) { \
+  s->content[s->ptr] = value; \
+  s->ptr++; \
+} \
+T stack_pop__##N(s_stack__##N *s) { \
+  s->ptr--; \
+  return s->content[s->ptr]; \
+} \
+
 typedef enum {
   TOKEN_Symbol = 128, TOKEN_Debug,
 
@@ -325,12 +350,14 @@ typedef enum {
   OP_NULL = 0x00,
   OP_AccessField,
   OP_ConstructorCall,
-  OP_MethodCall
+  OP_MethodCall,
+  OP_UseTemporaryInstance
 } e_expression_operation_type;
 
 typedef union {
   s_symbol *field;
   s_method_def *method;
+  s_class_instance *temporary;
 } u_expression_operation_payload;
 
 struct _s_expression_operation {
@@ -356,7 +383,7 @@ typedef enum {
 
 typedef union {
   s_statement *statement;
-  s_class_instance *(*callback)(s_class_instance *self, s_list *args);
+  s_class_instance *(*callback)(s_class_instance *self, s_class_instance **args);
 } u_methodbody_content;
 
 typedef struct {
@@ -384,9 +411,9 @@ struct _s_class_instance {
 
 s_symbol *class_Create(char *name, s_scope *scope);
 
-s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_list *args), int nArguments, ...);
+s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), int nArguments, ...);
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_list *args), char *returnType, int nArguments, ...);
+s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
 
 s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args);
 
@@ -399,11 +426,13 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement);
 
 void __core_class_createInstance(s_statement *statement);
-s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_list *args);
+s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance **args);
 
 void __core_field_def(s_statement *statement);
 
 void __core_expression(s_class_instance *self, s_statement *statement);
+
+define_stack(s_class_instance *, s_class_instance_ptr);
 
 void __core_exe_statement(s_class_instance *self, s_statement *statement);
 
@@ -422,5 +451,8 @@ void __core_symbol_call(s_symbol *symbol, s_list *arguments);
 // Class actions
 s_symbol *__core_class_get_method(s_symbol *class, char *methodName);
 s_symbol *__core_class_get_field(s_symbol *class, char *fieldName);
+
+// Required lib classes
+s_symbol *LIB_NumberClass = NULL;
 
 #endif
