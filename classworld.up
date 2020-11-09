@@ -1,4 +1,4 @@
-a : Number = Number();
+a : Number = Number(775);
 b : Number = Number(10);
 c : Number = Number(1);
 d : Number = (a + b + c) + (a + b + c);
@@ -31,8 +31,8 @@ Main() {
 
   c.Print();
 
-  while (c < 100) {
-    c = c + 10;
+  while (c < 5000000) {
+    c = c + 1;
   }
 
   c.Print();

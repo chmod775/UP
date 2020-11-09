@@ -94,6 +94,8 @@ void *list_read_index(s_list *l, u_int64_t index) {
   return l->selected_item->value;
 }
 
+#define LIST_READ_FIRST_FAST(L) L->selected_item = L->head_item;
+
 void *list_read_first(s_list *l) {
 	PANALYSIS("list_read_first");
   if (l->head_item == NULL) return NULL;
@@ -118,6 +120,8 @@ void *list_read_last(s_list *l) {
 
   return l->selected_item->value;
 }
+
+#define LIST_READ_NEXT_FAST(L) L->selected_item = L->selected_item->next;
 
 void *list_read_next(s_list *l) {
 	PANALYSIS("list_read_next");
@@ -705,7 +709,7 @@ s_statement *statement_CreateInside(s_statement *parent, e_statementtype type) {
 	PANALYSIS("statement_CreateInside");
   s_statement *ret = NEW(s_statement);
 
-  ret->parent = parent->parent;
+  ret->parent = parent;
   ret->scope = parent->scope;
 
   ret->type = type;
@@ -767,6 +771,8 @@ s_compiler *compiler_Init(char *content) {
 
   ret->parser = parse_Init(content);
   if (!ret->parser) { PERROR("compiler_Init", "Could not initialize root parser"); return NULL; }
+
+  stack = stack_create__s_class_instance_ptr(256);
 
   return ret;
 }
@@ -915,6 +921,8 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
         if (found_overload == NULL) CERROR(compiler, "expression_Step", "Method overload not found.");
 
         op->payload.method = found_overload;
+
+
       } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
         op = expression_Emit(operations, OP_ConstructorCall);
 
@@ -968,10 +976,13 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       op_target->type = op->type;
       op_target->payload = op->payload;
 
-      match(statement->scope, TOKEN_Add);
-      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Mul);
+      s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
 
       s_list *args = list_create();
+      list_push(args, op_temporaryDestination);
+
+      match(statement->scope, TOKEN_Add);
+      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Mul);
       list_push(args, op_arg);
 
       op = expression_Emit(operations, OP_MethodCall);
@@ -983,6 +994,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       } else {
         CERROR(compiler, "expression_Step", "Wrong operation type");
       }
+
+      s_class_instance *new_temporaryInstance = class_CreateInstance(op->payload.method->ret_type);
+      op_temporaryDestination->payload.temporary = new_temporaryInstance;
     } else if (token.type == TOKEN_Inc) {
       match(statement->scope, TOKEN_Inc);
       
@@ -991,10 +1005,13 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       op_target->type = op->type;
       op_target->payload = op->payload;
 
-      match(statement->scope, TOKEN_Lt);
-      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Shl);
+      s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
 
       s_list *args = list_create();
+      list_push(args, op_temporaryDestination);
+
+      match(statement->scope, TOKEN_Lt);
+      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Shl);
       list_push(args, op_arg);
 
       op = expression_Emit(operations, OP_MethodCall);
@@ -1006,6 +1023,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       } else {
         CERROR(compiler, "expression_Step", "Wrong operation type");
       }
+
+      s_class_instance *new_temporaryInstance = class_CreateInstance(op->payload.method->ret_type);
+      op_temporaryDestination->payload.temporary = new_temporaryInstance;
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1019,7 +1039,7 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_Expression");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_EXPRESSION);
 
-  ret->exe_cb = &__core_expression;
+  ret->exe_cb = &__core_exe_expression;
 
   ret->body.expression = NEW(s_statementbody_expression);
   ret->body.expression->operations = list_create();
@@ -1733,7 +1753,6 @@ void __core_while(s_class_instance *self, s_statement *statement) {
     __core_exe_statement(self, statement_body->loop);
     check_result = __core_exe_expression(self, statement_body->check);
   }
-  
 }
 
 void __core_new_class_instance() {}
@@ -1756,12 +1775,11 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
 
   s_list *operations = statement->body.expression->operations;
 
-  s_stack__s_class_instance_ptr stack = stack_create__s_class_instance_ptr(256);
-
   s_class_instance *args[32];
 
-  s_expression_operation *op = list_read_first(operations);
-  while (op != NULL) {
+  s_list_item *op_item = LIST_READ_FIRST_FAST(operations);
+  while (op_item != NULL) {
+    s_expression_operation *op = op_item->value;
     if (op->type == OP_AccessField) {
       s_class_instance *value = self->data[op->payload.field->body.field->value.data_index];
       stack_push__s_class_instance_ptr(&stack, value);
@@ -1773,8 +1791,8 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
       // Pop arguments from stack
       u_int64_t args_count = op->payload.method->arguments->items_count;
 
-      u_int64_t arg_idx;
-      for (arg_idx = 0; arg_idx < args_count; arg_idx++) {
+      int64_t arg_idx;
+      for (arg_idx = args_count - 1; arg_idx >= 0; arg_idx--) {
         s_class_instance *arg_value = stack_pop__s_class_instance_ptr(&stack);
         args[arg_idx] = arg_value;
       }
@@ -1794,7 +1812,7 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
       PERROR("__core_exe_expression", "Operation not allowed.");
     }
 
-    op = list_read_next(operations);
+    op_item = LIST_READ_NEXT_FAST(operations);
   }
 
   if (stack.ptr > 1) PERROR("__core_exe_expression", "Stack error.");
@@ -1840,11 +1858,10 @@ s_class_instance *number_Constructor_Number(s_class_instance *self, s_class_inst
 
 s_class_instance *number_Add_Number(s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Add_Number");
-  s_class_instance *ret = class_CreateInstance(LIB_NumberClass);
+  s_class_instance *ret = args[0];
 
-  s_class_instance *arg_B = args[0];
+  s_class_instance *arg_B = args[1];
 
-  ret->data = malloc(sizeof(u_int64_t));
   ret->data = (u_int64_t)self->data + (u_int64_t)arg_B->data;
 
   return ret;
@@ -1852,11 +1869,10 @@ s_class_instance *number_Add_Number(s_class_instance *self, s_class_instance **a
 
 s_class_instance *number_Less_Number(s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Less_Number");
-  s_class_instance *ret = class_CreateInstance(LIB_NumberClass);
+  s_class_instance *ret = args[0];
 
-  s_class_instance *arg_B = args[0];
+  s_class_instance *arg_B = args[1];
 
-  ret->data = malloc(sizeof(u_int64_t));
   ret->data = (u_int64_t)self->data < (u_int64_t)arg_B->data;
 
   return ret;
@@ -1885,8 +1901,8 @@ void stdlib_Init(s_compiler *compiler) {
   // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
   // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
   // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
-  class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
-  class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 2, "Number", "Number");
+  class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 2, "Number", "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Print", &number_Assign_Print, NULL, 0);
 }

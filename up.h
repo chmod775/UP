@@ -168,6 +168,7 @@ typedef enum {
 
 typedef struct {
   s_list *statements; // <s_statement>
+  s_list *temporaries; // <s_class_instance>
 } s_statementbody_block;
 
 typedef struct {
@@ -423,6 +424,9 @@ void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### CORE libs ##### */
+define_stack(s_class_instance *, s_class_instance_ptr);
+s_stack__s_class_instance_ptr stack;
+
 s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement);
 
 void __core_class_createInstance(s_statement *statement);
@@ -432,7 +436,7 @@ void __core_field_def(s_statement *statement);
 
 void __core_expression(s_class_instance *self, s_statement *statement);
 
-define_stack(s_class_instance *, s_class_instance_ptr);
+
 
 void __core_exe_statement(s_class_instance *self, s_statement *statement);
 
