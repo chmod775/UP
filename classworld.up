@@ -1,7 +1,6 @@
 a : Number = Number(775);
 b : Number = Number(10);
 c : Number = Number(1);
-d : Number = (a + b + c) + (a + b + c);
 
 Boia {
   p : Number = Number(1);
@@ -16,9 +15,26 @@ Boia {
     p.Print();
     g.Print();
   }
+
+  Load(qq : Number) {
+    p = qq;
+  }
+
+  Assign(src : Boia) : Boia {
+
+  }
+
+
+  Add(argA : Boia, argB : Boia) : Boia {
+  }
+
+  Show() {
+    p.Print();
+  }
 }
 
-t : Boia = Boia();
+t1 : Boia = Boia();
+t2 : Boia = Boia();
 
 //c : Number = a.Add(b);
 
@@ -31,24 +47,14 @@ Main() {
 
   c.Print();
 
-  while (c < 5000000) {
+  while (c < 100000) {
     c = c + 1;
   }
 
   c.Print();
 
-  //c.Assign(b + a);
-  c = 123;
-  c.Print();
-  d.Print();
-  //c = (a + b);
-  //c = c + b;
-  //c.Print();
+  t2 = t2 + t1;
 
-
-
-  //d.Assign(c + a);
-  //d.Print();
-
-  t.De();
+  t1.Load(775);
+  //t1.Show();
 }

@@ -410,8 +410,8 @@ char *scope_Print(s_scope *scope) {
 
   s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
   while (symbol_ptr != NULL) {
-    int len = sprintf(buffer_ptr, "Symbol: %s - %d", symbol_GetCleanName(symbol_ptr), symbol_ptr->type);
-    buffer_ptr += len + 1;
+    int len = sprintf(buffer_ptr, "%s - %d,", symbol_GetCleanName(symbol_ptr), symbol_ptr->type);
+    buffer_ptr += len;
     symbol_ptr = (s_symbol *)parlist_read_next(scope->symbols);
   }
 
@@ -749,11 +749,12 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
 
   ret->type = STATEMENT_CLASS_DEF;
   ret->parent = NULL;
-  ret->scope = compiler->rootScope;
   ret->exe_cb = NULL;
 
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_Create("Program", compiler->rootScope);
+
+  ret->scope = ret->body.class_def->symbol->body.class->scope;
 
   return ret;
 }
@@ -1056,7 +1057,7 @@ s_symbol *class_Create(char *name, s_scope *scope) {
 
   symbol->body.class = NEW(s_symbolbody_class);
   symbol->body.class->parent = NULL;
-  symbol->body.class->scope = scope;
+  symbol->body.class->scope = scope_Create(scope);
   symbol->body.class->fields = list_create();
   symbol->body.class->methods = list_create();
   symbol->body.class->constructors = list_create();
