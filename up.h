@@ -138,10 +138,12 @@ typedef struct _s_symbol s_anytype;
 typedef struct {
   s_anytype *type;
   u_int64_t data_index;
-} s_anyvalue;
+} s_anyvalue_field;
 
-s_anyvalue s_anyvalue_createPrimary(int type, void *value);
-
+typedef struct {
+  s_anytype *type;
+  s_class_instance *data;
+} s_anyvalue_argument;
 
 /* ##### Scope ##### */
 typedef struct _s_scope {
@@ -161,9 +163,11 @@ typedef enum {
   STATEMENT_RETURN,
   STATEMENT_FIELD_DEF,
   STATEMENT_METHOD_DEF,
+  STATEMENT_ARGUMENT_DEF,
   STATEMENT_CLASS_DEF,
   STATEMENT_CONSTRUCTOR_DEF,
-  STATEMENT_EXPRESSION
+  STATEMENT_EXPRESSION,
+  STATEMENT_DEBUG
 } e_statementtype;
 
 typedef struct {
@@ -192,6 +196,10 @@ typedef struct {
 
 typedef struct {
   s_symbol *symbol;
+} s_statementbody_argument_def;
+
+typedef struct {
+  s_symbol *symbol;
 } s_statementbody_class_def;
 
 typedef struct {
@@ -208,6 +216,7 @@ typedef union {
   s_statementbody_while *_while;
   s_statementbody_field_def *field_def;
   s_statementbody_method_def *method_def;
+  s_statementbody_argument_def *argument_def;
   s_statementbody_class_def *class_def;
   s_statementbody_constructor_def *constructor_def;
   s_statementbody_expression *expression;
@@ -227,6 +236,7 @@ typedef enum {
   SYMBOL_KEYWORD,
   SYMBOL_FIELD,
   SYMBOL_METHOD,
+  SYMBOL_ARGUMENT,
   SYMBOL_CLASS
 } e_symboltype;
 
@@ -235,9 +245,14 @@ typedef struct {
 } s_symbolbody_keyword;
 
 typedef struct {
-  s_anyvalue value;
+  s_anyvalue_field value;
   s_statement *init_expression;
 } s_symbolbody_field;
+
+typedef struct {
+  s_anyvalue_argument value;
+  s_statement *init_expression;
+} s_symbolbody_argument;
 
 typedef struct {
   s_list *overloads; // <s_method_def>
@@ -255,6 +270,7 @@ typedef union {
   s_symbolbody_keyword *keyword;
   s_symbolbody_field *field;
   s_symbolbody_method *method;
+  s_symbolbody_argument *argument;
   s_symbolbody_class *class;
 } u_symbolbody;
 
@@ -349,14 +365,14 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 /* ##### Expression ##### */
 typedef enum {
   OP_NULL = 0x00,
-  OP_AccessField,
+  OP_AccessSymbol,
   OP_ConstructorCall,
   OP_MethodCall,
   OP_UseTemporaryInstance
 } e_expression_operation_type;
 
 typedef union {
-  s_symbol *field;
+  s_symbol *symbol;
   s_method_def *method;
   s_class_instance *temporary;
 } u_expression_operation_payload;
@@ -432,6 +448,7 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
 void __core_class_createInstance(s_statement *statement);
 s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance **args);
 
+void __core_argument_def(s_statement *statement);
 void __core_field_def(s_statement *statement);
 
 void __core_expression(s_class_instance *self, s_statement *statement);
@@ -443,10 +460,11 @@ void __core_exe_statement(s_class_instance *self, s_statement *statement);
 void __core_if(s_statement *statement);
 void __core_for(s_statement *statement);
 void __core_while(s_class_instance *self, s_statement *statement);
+void __core_debug(s_class_instance *self, s_statement *statement);
 
 // Symbols actions
-void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
-s_anyvalue __core_symbol_get_value(s_symbol *symbol);
+//void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
+//s_anyvalue __core_symbol_get_value(s_symbol *symbol);
 
 void __core_symbol_call(s_symbol *symbol, s_list *arguments);
 

@@ -17,6 +17,8 @@ Boia {
   }
 
   Load(qq : Number) {
+    DEBUG
+    qq.Print();
     p = qq;
   }
 
@@ -44,17 +46,20 @@ t2 : Boia = Boia();
 
 Main() {
   //c = b + a;
+  t1.Show();
+  t1.Load(775);
+  t1.Show();
 
   c.Print();
 
-  while (c < 100000) {
+  while (c < 10000) {
     c = c + 1;
+    a = a + 1;
   }
 
-  c.Print();
+  a.Print();
 
-  t2 = t2 + t1;
+  //t2 = t2 + t1;
 
-  t1.Load(775);
   //t1.Show();
 }

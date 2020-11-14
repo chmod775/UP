@@ -6,10 +6,11 @@ void main() {
     return a + b;
   }
 
-  u_int64_t i = 3;
-  while (i < 10000000)
+  u_int64_t i = 0;
+  u_int64_t a = 775;
+  while (i < 8000000) {
     i++;
-  printf("%d", i);
-
-  printf("%d", abc(5,6));
+    a++;
+  }
+    printf("%lu", a);
 }

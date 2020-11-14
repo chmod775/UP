@@ -1,5 +1,6 @@
 c = 0
-while (c < 100000):
+a = 775
+while (c < 8000000):
   c = c + 1;
-
-print(c)
+  a = a + 1;
+print(a)

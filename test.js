@@ -1,4 +1,8 @@
 var i = 0;
-while (i < 100000)
+var a = 775;
+while (i < 8000000) {
 	i++;
-console.log(i);
+	a++;
+}
+
+console.log(a);

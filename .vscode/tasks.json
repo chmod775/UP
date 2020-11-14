@@ -7,7 +7,6 @@
       "command": "gcc",
       "args": [
         "${file}",
-        "-O3",
         "-g",
         "-o",
         "${fileDirname}/${fileBasenameNoExtension}.exe"

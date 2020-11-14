@@ -1,2 +1,12 @@
 v0.2
   - Put casting and type conversion on compiler side. (not on __core execution)
+
+v0.3
+  - String class
+  - Integrate real with Number class
+  - Regex (using class ?)
+  - JSON (using class ?)
+  - List and Dictionary classes
+  - FOR statement
+  - SWITCH statement
+  - 

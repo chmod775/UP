@@ -1,6 +1,6 @@
-a : Number = 0;
+c : Number = 0;
 Main() {
-  while (a < 10000000) {
+  while (c < 10000000) {
     a = a + 1;
   }
   a.Print();
