@@ -1,65 +1,41 @@
-a : Number = Number(775);
-b : Number = Number(10);
-c : Number = Number(1);
 
 Boia {
-  p : Number = Number(1);
-  g : Number = Number(9);
+  a : Number = 10;
 
   () {
-    //g = p + p;
-    //g = Number();
-  }
-
-  De() {
-    p.Print();
-    g.Print();
-  }
-
-  Load(qq : Number) {
-    DEBUG
-    qq.Print();
-    p = qq;
-  }
-
-  Assign(src : Boia) : Boia {
 
   }
-
-
-  Add(argA : Boia, argB : Boia) : Boia {
+  
+  Value() : Number { 
+    return Number(1);
   }
+}
 
-  Show() {
-    p.Print();
+Car {
+  motor : Boia = Boia();
+
+  () {}
+
+  GetMotor() : Boia {
+    return motor;
   }
 }
 
 t1 : Boia = Boia();
-t2 : Boia = Boia();
 
-//c : Number = a.Add(b);
-
-//c = a + b;
-
-//c.Assign(a.Add(b));
+//c1 : Car = Car();
 
 Main() {
-  //c = b + a;
-  t1.Show();
-  t1.Load(775);
-  t1.Show();
+  (1 + 2).Print();
 
-  c.Print();
+  (t1.Value() + t1.Value() + t1.a).Print();
 
-  while (c < 10000) {
-    c = c + 1;
-    a = a + 1;
-  }
-
-  a.Print();
-
-  //t2 = t2 + t1;
-
-  //t1.Show();
+  t1.a.Print();
+  t1.Value().Print();
+/*
+  c1.motor.Value().Print();
+  c1.motor.a.Print();
+  c1.GetMotor().a.Print();
+  c1.GetMotor().Value().Print();
+  */
 }

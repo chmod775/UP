@@ -393,6 +393,8 @@ s_scope *scope_CreateAsRoot() {
   scope_AddSymbol(ret, symbol_CreateFromKeyword("for", TOKEN_For));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("switch", TOKEN_Switch));
 
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("this", TOKEN_This));
+
   scope_AddSymbol(ret, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
 
   return ret;
@@ -656,7 +658,10 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '?') {
       ret(TOKEN_Cond, NULL, any);
-    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',' || token == ':' || token == '.') {
+    }
+    else if (token == '.') {
+      ret(TOKEN_Dot, NULL, any);
+    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',' || token == ':') {
       // directly return the character as token;
       ret(token, NULL, any);
     }
@@ -806,7 +811,7 @@ void compiler_Execute(s_compiler *compiler) {
   s_class_instance *programInstance = class_CreateInstance(compiler->rootStatement->body.class_def->symbol);
 
   s_list *args = list_create();
-  s_method_def *mainMethod = class_FindMethod(compiler->rootStatement->body.class_def->symbol, "Main", args);
+  s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
 
   __core_exe_method(programInstance, mainMethod, args);
 }
@@ -833,10 +838,48 @@ s_expression_operation *expression_Emit(s_list *core_operations, e_expression_op
 #define preview(S) parse_Preview((S), compiler->parser)
 #define emit(O, A) list_push(O, (A))
 
+s_symbol *expression_GetClassOfOperation(s_expression_operation *operation) {
+  s_symbol *ret = NULL;
 
-s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, int level) {
+  if (operation->type == OP_AccessSymbol) {
+    ret = operation->payload.symbol->body.field->value.type;
+  } else if (operation->type == OP_UseTemporaryInstance) {
+    ret = operation->payload.temporary->class;
+  } else if ((operation->type == OP_MethodCall) || (operation->type == OP_ConstructorCall)) {
+    ret = operation->payload.method->ret_type;
+  } else {
+    PERROR("expression_GetClassOfOperation", "Wrong operation type");
+  }
+
+  return ret;
+}
+
+s_method_def *expression_FindMethodOverloadInOperation(s_expression_operation *operation, char *name, s_list *args) {
+  s_symbol *symbol_target = expression_GetClassOfOperation(operation);
+  if (symbol_target == NULL) PERROR("expression_FindMethodOverloadInOperation", "No target symbol found");
+
+  s_method_def *ret = class_FindMethodByName(symbol_target, name, args);
+  if (ret == NULL) PERROR("expression_FindMethodOverloadInOperation", "No method found");
+
+  return ret;
+}
+
+s_expression_operation *expression_MethodCall(s_list *operations, s_method_def *method) {
+  // Allocate return type
+  if (method->ret_type != NULL) {
+    s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
+    s_class_instance *new_returnInstance = class_CreateInstance(method->ret_type);
+    op_temporaryDestination->payload.temporary = new_returnInstance;
+  }
+
+  s_expression_operation *ret = expression_Emit(operations, OP_MethodCall);
+  ret->payload.method = method;
+
+  return ret;
+}
+
+s_expression_operation *expression_Step(s_compiler *compiler, s_scope *scope, s_list *operations, int level) {
 	PANALYSIS("expression_Step");
-  s_list *operations = statement->body.expression->operations;
   s_expression_operation *op = NULL;
 
   // Unary operators
@@ -849,109 +892,85 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = number;
 
-    match(statement->scope, TOKEN_Literal_Int);
+    match(scope, TOKEN_Literal_Int);
   } else if (token.type == TOKEN_Literal_Real) {
     // TODO
-    match(statement->scope, TOKEN_Literal_Real);    
+    match(scope, TOKEN_Literal_Real);    
   } else if (token.type == TOKEN_Literal_String) {
     // TODO
-    match(statement->scope, TOKEN_Literal_String);
+    match(scope, TOKEN_Literal_String);
+  } else if (token.type == TOKEN_This) {
+    //op = expression_Emit(operations, OP_UseTemporaryInstance);
+    //op->payload.temporary = number;
+
+    match(scope, TOKEN_This);
   } else if (token.type == TOKEN_Symbol) {
     s_symbol *symbol = token.content.symbol;
     if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
 
     s_symbol *target_symbol = symbol;
 
-    match(statement->scope, TOKEN_Symbol);
-
-    // Descend parent hierarchy
-    while (token.type == '.') {
-      s_scope *parent_scope = statement->scope;
-
-      if (symbol->type == SYMBOL_CLASS) {
-        parent_scope = symbol->body.class->scope;
-      } else if (symbol->type == SYMBOL_FIELD) {
-        parent_scope = symbol->body.field->value.type->body.class->scope;
-      } else if (symbol->type == SYMBOL_ARGUMENT) {
-        parent_scope = symbol->body.argument->value.type->body.class->scope;
-      } else {
-        CERROR(compiler, "expression_Step", "Parent symbol is not valid.");
-      }
-
-      match(parent_scope, '.');
-
-      symbol = token.content.symbol;
-      if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "expression_Step", "Symbol not defined.");
-
-      match(parent_scope, TOKEN_Symbol);
-    }
+    match(scope, TOKEN_Symbol);
 
     if (token.type == '(') { // Call of Method or Constructor
       // Arguments
-      match(statement->scope, '(');
+      match(scope, '(');
 
-      if (symbol->type == SYMBOL_METHOD) {
-        op = expression_Emit(operations, OP_AccessSymbol);
-        op->payload.symbol = target_symbol;
-      }
+      s_list *args = list_create();
 
-      u_int64_t TEMP_arguments_count = 0;
       while (token.type != ')') {
-        expression_Step(compiler, statement, TOKEN_Assign);
-
-        if (token.type == ',')
-          match(statement->scope, ',');
-
-        TEMP_arguments_count++;
+        s_expression_operation *ret = expression_Step(compiler, scope, operations, TOKEN_Assign);
+        list_push(args, ret);
       }
 
-      match(statement->scope, ')');
+      match(scope, ')');
 
-      if (symbol->type == SYMBOL_METHOD) { // Internal method call
-        op = expression_Emit(operations, OP_MethodCall);
+      if (symbol->type == SYMBOL_METHOD) { // Method call
+        // Search method overload
+        s_method_def *found_overload = method_FindOverload(symbol, args);
 
-        s_method_def *found_overload = list_read_first(symbol->body.method->overloads);
-        while (found_overload != NULL) {
-          if (found_overload->arguments->items_count == TEMP_arguments_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
-            break;
-          found_overload = list_read_next(symbol->body.method->overloads);
-        }
-
-        if (found_overload == NULL) CERROR(compiler, "expression_Step", "Method overload not found.");
-
-        op->payload.method = found_overload;
-
-
+        // Emit method call
+        op = expression_MethodCall(operations, found_overload);
       } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
-        op = expression_Emit(operations, OP_ConstructorCall);
-
+        // Search constructor overload
         s_method_def *found_constructor = list_read_first(symbol->body.class->constructors);
         while (found_constructor != NULL) {
-          if (found_constructor->arguments->items_count == TEMP_arguments_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
+          if (found_constructor->arguments->items_count == args->items_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
             break;
           found_constructor = list_read_next(symbol->body.class->constructors);
         }
 
         if (found_constructor == NULL) CERROR(compiler, "expression_Step", "Constructor not found.");
 
+
+        // Allocate return type
+        if (found_constructor->ret_type != NULL) {
+          s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
+          s_class_instance *new_returnInstance = class_CreateInstance(found_constructor->ret_type);
+          op_temporaryDestination->payload.temporary = new_returnInstance;
+        }
+
+        op = expression_Emit(operations, OP_ConstructorCall);
         op->payload.method = found_constructor;
       } else {
         CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
       }
-    } else {
+    } else { // Symbol access
       op = expression_Emit(operations, OP_AccessSymbol);
       op->payload.symbol = symbol;
     }
   } else if (token.type == '(') {
-    match(statement->scope, '(');
-    op = expression_Step(compiler, statement, TOKEN_Assign);
-    match(statement->scope, ')');
+    match(scope, '(');
+    op = expression_Step(compiler, scope, operations, TOKEN_Assign);
+    match(scope, ')');
   } else if (token.type == ',') {
     return NULL;
   } else {
     CERROR(compiler, "expression_Step", "Bad expression.");
     exit(-1);
   }
+
+
 
   // binary operator and postfix operators.
   while (token.type >= level) {
@@ -960,71 +979,62 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       op_target->type = op->type;
       op_target->payload = op->payload;
 
-      match(statement->scope, TOKEN_Assign);
-
-      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Assign);
-
       s_list *args = list_create();
+
+      match(scope, TOKEN_Assign);
+
+      s_expression_operation *op_arg = expression_Step(compiler, scope, operations, TOKEN_Assign);
       list_push(args, op_arg);
 
       op = expression_Emit(operations, OP_MethodCall);
-
-      op->payload.method = class_FindMethod(op_target->payload.symbol->body.field->value.type, "Assign", args);
+      op->payload.method = class_FindMethodByName(op_target->payload.symbol->body.field->value.type, "Assign", args);
     } else if (token.type == TOKEN_Add) {
-      s_expression_operation *op_target = NEW(s_expression_operation);
-      op_target->type = op->type;
-      op_target->payload = op->payload;
+      match(scope, TOKEN_Add);
 
-      s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
+      s_expression_operation *op_arg = expression_Step(compiler, scope, operations, TOKEN_Mul);
 
       s_list *args = list_create();
-      list_push(args, op_temporaryDestination);
-
-      match(statement->scope, TOKEN_Add);
-      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Mul);
       list_push(args, op_arg);
 
-      op = expression_Emit(operations, OP_MethodCall);
-
-      if (op_target->type == OP_AccessSymbol) {
-        op->payload.method = class_FindMethod(op_target->payload.symbol->body.field->value.type, "Add", args);
-      } else if ((op_target->type == OP_MethodCall) || (op_target->type == OP_ConstructorCall)) {
-        op->payload.method = class_FindMethod(op_target->payload.method->ret_type, "Add", args);
-      } else {
-        CERROR(compiler, "expression_Step", "Wrong operation type");
-      }
-
-      s_class_instance *new_temporaryInstance = class_CreateInstance(op->payload.method->ret_type);
-      op_temporaryDestination->payload.temporary = new_temporaryInstance;
+      s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, "Add", args);
+      op = expression_MethodCall(operations, found_methodOverload);
     } else if (token.type == TOKEN_Inc) {
-      match(statement->scope, TOKEN_Inc);
+      match(scope, TOKEN_Inc);
       
     } else if (token.type == TOKEN_Lt) {
-      s_expression_operation *op_target = NEW(s_expression_operation);
-      op_target->type = op->type;
-      op_target->payload = op->payload;
+      match(scope, TOKEN_Lt);
 
-      s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
+      s_expression_operation *op_arg = expression_Step(compiler, scope, operations, TOKEN_Shl);
 
       s_list *args = list_create();
-      list_push(args, op_temporaryDestination);
-
-      match(statement->scope, TOKEN_Lt);
-      s_expression_operation *op_arg = expression_Step(compiler, statement, TOKEN_Shl);
       list_push(args, op_arg);
 
-      op = expression_Emit(operations, OP_MethodCall);
+      s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, "Less", args);
+      op = expression_MethodCall(operations, found_methodOverload);
+    } else if (token.type == TOKEN_Dot) {
+      // Descend parent hierarchy
+      s_scope *parent_scope = scope;
 
-      if (op_target->type == OP_AccessSymbol) {
-        op->payload.method = class_FindMethod(op_target->payload.symbol->body.field->value.type, "Less", args);
-      } else if ((op_target->type == OP_MethodCall) || (op_target->type == OP_ConstructorCall)) {
-        op->payload.method = class_FindMethod(op_target->payload.method->ret_type, "Less", args);
+      s_expression_operation *last_op = op;
+      if (last_op->type == OP_AccessSymbol) {
+        s_symbol *op_symbol = last_op->payload.symbol;
+        if (op_symbol->type == SYMBOL_FIELD) {
+          parent_scope = op_symbol->body.field->value.type->body.class->scope;
+        } else if (op_symbol->type == SYMBOL_ARGUMENT) {
+          parent_scope = op_symbol->body.argument->value.type->body.class->scope;
+        } else {
+          CERROR(compiler, "expression_Step", "Access symbol is not valid.");
+        }
+      } else if (last_op->type == OP_UseTemporaryInstance) {
+        parent_scope = last_op->payload.temporary->class->body.class->scope;
+      } else if ((last_op->type == OP_MethodCall) || (last_op->type == OP_ConstructorCall)) {
+        parent_scope = last_op->payload.method->ret_type->body.class->scope;
       } else {
-        CERROR(compiler, "expression_Step", "Wrong operation type");
+        CERROR(compiler, "expression_Step", "Nested operation is not valid.");
       }
 
-      s_class_instance *new_temporaryInstance = class_CreateInstance(op->payload.method->ret_type);
-      op_temporaryDestination->payload.temporary = new_temporaryInstance;
+      match(parent_scope, TOKEN_Dot);
+      op = expression_Step(compiler, parent_scope, operations, TOKEN_Assign);
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1038,12 +1048,12 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_Expression");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_EXPRESSION);
 
-  ret->exe_cb = &__core_exe_expression;
+  ret->exe_cb = &__core_expression;
 
   ret->body.expression = NEW(s_statementbody_expression);
   ret->body.expression->operations = list_create();
   
-  expression_Step(compiler, ret, TOKEN_Assign);
+  expression_Step(compiler, ret->scope, ret->body.expression->operations, TOKEN_Assign);
 
   return ret;
 }
@@ -1201,26 +1211,35 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *
   va_end(valist);
 }
 
-s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args) {
-	PANALYSIS("class_FindMethod");
-  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethod", "Destination is not a Class.");
-  if (name == NULL) PERROR("class_FindMethod", "Name cannot be null.");
+s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
+	PANALYSIS("method_FindOverload");
+  if (method == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
+  if (method->type != SYMBOL_METHOD) PERROR("method_FindOverload", "Symbol is not a Method.");
+  if (args == NULL) PERROR("method_FindOverload", "Args cannot be null.");
 
-  s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
-  if (found_symbol == NULL) PERROR("class_FindMethod", "Symbol does not exists.");
-
-  s_method_def *found_overload = list_read_first(found_symbol->body.method->overloads);
+  s_method_def *found_overload = list_read_first(method->body.method->overloads);
   while (found_overload != NULL) {
     if (found_overload->arguments->items_count == args->items_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
       break;
-    found_overload = list_read_next(found_symbol->body.method->overloads);
+    found_overload = list_read_next(method->body.method->overloads);
   }
 
-  if (found_overload == NULL) PERROR("class_FindMethod", "Method overload not found.");
+  if (found_overload == NULL) PERROR("method_FindOverload", "Method overload not found.");
 
   return found_overload;
 }
 
+s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args) {
+	PANALYSIS("class_FindMethodByName");
+  if (class == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
+  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol is not a Class.");
+  if (name == NULL) PERROR("class_FindMethodByName", "Name cannot be null.");
+
+  s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
+  if (found_symbol == NULL) PERROR("class_FindMethodByName", "Symbol does not exists.");
+  
+  return method_FindOverload(found_symbol, args);
+}
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
 	PANALYSIS("compile_ClassBody");
@@ -1267,9 +1286,9 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
     match(parent->scope, ':');
   }
 
-  if (token.type == '.') { // External Inheritance
+  if (token.type == TOKEN_Dot) { // External Inheritance
     // ClassA.ClassB...ClassC.Children {}
-    match(parent->scope, '.');
+    match(parent->scope, TOKEN_Dot);
   }
 
   s_statement *ret = NULL;
@@ -1464,9 +1483,9 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
     match(statement->scope, TOKEN_Symbol);
 
     // Childrens
-    while (token.type == '.') {
+    while (token.type == TOKEN_Dot) {
       s_symbolbody_class *symbol_body = symbol->body.class;
-      match(symbol_body->scope, '.');
+      match(symbol_body->scope, TOKEN_Dot);
 
       symbol = token.content.symbol;
       if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
@@ -1596,6 +1615,23 @@ s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+s_statement *compile_Return(s_compiler *compiler, s_statement *parent) {
+	PANALYSIS("compile_Return");
+
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_RETURN);
+  ret->exe_cb = &__core_return;
+
+  match(ret->scope, TOKEN_Return);
+
+  ret->body._return = NEW(s_statementbody_return);
+
+  ret->body._return->value = compile_Expression(compiler, ret);
+
+  //match(ret->scope, ';');
+
+  return ret;
+}
+
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_DefinitionStatement");
   // Definition statements types:
@@ -1675,7 +1711,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
 
     match(parent->scope, '}');
   } else if (token.type == TOKEN_Return) {
-
+    ret = compile_Return(compiler, parent);
   } else if (token.type == ';') {
     // Empty statement
     match(parent->scope, ';');
@@ -1719,40 +1755,61 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
 /* ##### CORE Libs ##### */
 void __core_field_def(s_statement *statement) {
 	PANALYSIS("__core_field_def");
+  return STATEMENT_END_CONTINUE;
 }
 
 void __core_argument_def(s_statement *statement) {
 	PANALYSIS("__core_argument_def");
+  return STATEMENT_END_CONTINUE;
 }
 
-void __core_expression(s_class_instance *self, s_statement *statement) {
+e_statementend __core_expression(s_class_instance *self, s_statement *statement) {
 	PANALYSIS("__core_expression");
   __core_exe_expression(self, statement);
+  return STATEMENT_END_CONTINUE;
 }
 
-void __core_exe_statement(s_class_instance *self, s_statement *statement) {
+e_statementend __core_exe_statement(s_class_instance *self, s_statement *statement) {
 	PANALYSIS("__core_exe_statement");
+  u_int64_t pre_stack_ptr = stack.ptr;
+
+  e_statementend ret = STATEMENT_END_CONTINUE;
+
   if (statement != NULL) {
     if (statement->type == STATEMENT_BLOCK) {
       s_statementbody_block *statement_body = statement->body.block;
 
       s_statement *sub_statement = list_read_first(statement_body->statements);
       do {
-        __core_exe_statement(self, sub_statement);
+        ret = __core_exe_statement(self, sub_statement);
+        if (ret != STATEMENT_END_CONTINUE)
+          break;
         sub_statement = list_read_next(statement_body->statements);
       } while (sub_statement != NULL);
     } else {
       if (statement->exe_cb)
-        statement->exe_cb(self, statement);
+        ret = statement->exe_cb(self, statement);
     }
   }
+
+  if (ret == STATEMENT_END_RETURN) {
+    s_class_instance *return_value = stack_pop__s_class_instance_ptr(&stack);
+    stack.ptr = pre_stack_ptr;
+    stack_push__s_class_instance_ptr(&stack, return_value);
+  } else {
+    stack.ptr = pre_stack_ptr;
+  }
+
+  return ret;
 }
 
-void __core_debug(s_class_instance *self, s_statement *statement) {
+e_statementend __core_debug(s_class_instance *self, s_statement *statement) {
+	PANALYSIS("__core_debug");
   int a = 0;
+  return STATEMENT_END_CONTINUE;
 }
 
-void __core_while(s_class_instance *self, s_statement *statement) {
+e_statementend __core_while(s_class_instance *self, s_statement *statement) {
 	PANALYSIS("__core_while");
   if (statement->type != STATEMENT_WHILE) PERROR("__core_while", "Wrong statement type");
 
@@ -1761,14 +1818,32 @@ void __core_while(s_class_instance *self, s_statement *statement) {
   s_class_instance *check_result = __core_exe_expression(self, statement_body->check);
 
   while (check_result->data) {
-    __core_exe_statement(self, statement_body->loop);
+    e_statementend ret = __core_exe_statement(self, statement_body->loop);
+    if (ret != STATEMENT_END_CONTINUE)
+      break;
     check_result = __core_exe_expression(self, statement_body->check);
   }
+
+  return STATEMENT_END_CONTINUE;
+}
+
+e_statementend __core_return(s_class_instance *self, s_statement *statement) {
+	PANALYSIS("__core_return");
+  if (statement->type != STATEMENT_RETURN) PERROR("__core_return", "Wrong statement type");
+
+  s_statementbody_return *statement_body = statement->body._return;
+  s_class_instance *result_value = __core_exe_expression(self, statement_body->value);
+
+  stack_push__s_class_instance_ptr(&stack, result_value);
+
+  return STATEMENT_END_RETURN;
 }
 
 s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance **args) {
 	PANALYSIS("__core_exe_method");
   if (method->body.type == METHODBODY_STATEMENT) {
+    s_class_instance *return_value = NULL;
+
     // Map arguments value
     u_int64_t arg_index = 0;
     s_symbol *arg = list_read_first(method->arguments);
@@ -1777,8 +1852,11 @@ s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method
       arg = list_read_next(method->arguments);
       arg_index++;
     }
-    __core_exe_statement(self, method->body.content.statement);
-    return NULL;
+    e_statementend ret = __core_exe_statement(self, method->body.content.statement);
+
+    if (ret == STATEMENT_END_RETURN)
+      return_value = stack_pop__s_class_instance_ptr(&stack);
+    return return_value;
   } else if (method->body.type == METHODBODY_CALLBACK) {
     return method->body.content.callback(self, args);
   } else {
@@ -1793,6 +1871,8 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
   s_list *operations = statement->body.expression->operations;
 
   s_class_instance *args[32];
+
+  u_int64_t pre_stack_ptr = stack.ptr;
 
   s_list_item *op_item = LIST_READ_FIRST_FAST(operations);
   while (op_item != NULL) {
@@ -1827,7 +1907,8 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
       if (op->type == OP_MethodCall) {
         target = stack_pop__s_class_instance_ptr(&stack);
         value = __core_exe_method(target, op->payload.method, args);
-        stack_push__s_class_instance_ptr(&stack, value);
+        if (op->payload.method->ret_type != NULL)
+          stack_push__s_class_instance_ptr(&stack, value);
       } else if (op->type == OP_ConstructorCall) {
         target = class_CreateInstance(op->payload.method->ret_type);
         __core_exe_method(target, op->payload.method, args);
@@ -1840,8 +1921,13 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
     op_item = LIST_READ_NEXT_FAST(operations);
   }
 
-  if (stack.ptr > 1) PERROR("__core_exe_expression", "Stack error.");
-  return stack_pop__s_class_instance_ptr(&stack);
+  if ((stack.ptr - pre_stack_ptr) > 1)
+    PERROR("__core_exe_expression", "Stack error.");
+
+  if (stack.ptr > 0)
+    return stack_pop__s_class_instance_ptr(&stack);
+  else
+    return NULL;
 }
 
 s_class_instance *class_CreateInstance(s_symbol *class) {
@@ -1922,12 +2008,9 @@ void stdlib_Init(s_compiler *compiler) {
   // class_CreateField(LIB_NumberClass, "raw", NULL, sizeof(u_int64_t));
   class_CreateConstructor(LIB_NumberClass, &number_Constructor, 0);
   class_CreateConstructor(LIB_NumberClass, &number_Constructor_Number, 1, NULL);
-  // class_CreateConstructor(LIB_NumberClass, &number_Constructor, 1, "Number");
-  // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Literal_Literal, 2, NULL, NULL);
-  // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Literal_Number, 2, NULL, "Number");
-  // class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number_Literal, 2, "Number", NULL);
-  class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 2, "Number", "Number");
-  class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 2, "Number", "Number");
+
+  class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Print", &number_Assign_Print, NULL, 0);
 }

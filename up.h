@@ -82,6 +82,9 @@ s_stack__##T stack_create__##T(int size) { \
 void stack_free__##T(s_stack__##T s) { \
   free(s.content); \
 } \
+void stack_clear__##T(s_stack__##T *s) { \
+  s->ptr = 0; \
+} \
 void stack_push__##T(s_stack__##T *s, T value) { \
   s->content[s->ptr] = value; \
   s->ptr++; \
@@ -107,6 +110,9 @@ s_stack__##N stack_create__##N(int size) { \
 void stack_free__##N(s_stack__##N s) { \
   free(s.content); \
 } \
+void stack_clear__##N(s_stack__##N *s) { \
+  s->ptr = 0; \
+} \
 void stack_push__##N(s_stack__##N *s, T value) { \
   s->content[s->ptr] = value; \
   s->ptr++; \
@@ -123,8 +129,10 @@ typedef enum {
 
   TOKEN_CommentBlock_End,
 
+  TOKEN_This,
+
   TOKEN_If, TOKEN_Else, TOKEN_Return, TOKEN_While, TOKEN_For, TOKEN_Switch,
-  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak
+  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak, TOKEN_Dot
 } e_token;
 
 /* ##### Types ##### */
@@ -170,6 +178,13 @@ typedef enum {
   STATEMENT_DEBUG
 } e_statementtype;
 
+typedef enum {
+  STATEMENT_END_CONTINUE,
+  STATEMENT_END_BREAK,
+  STATEMENT_END_RETURN,
+  STATEMENT_END_EXIT
+} e_statementend;
+
 typedef struct {
   s_list *statements; // <s_statement>
   s_list *temporaries; // <s_class_instance>
@@ -185,6 +200,10 @@ typedef struct {
   s_statement *check;
   s_statement *loop;
 } s_statementbody_while;
+
+typedef struct {
+  s_statement *value;
+} s_statementbody_return;
 
 typedef struct {
   s_symbol *symbol;
@@ -214,6 +233,7 @@ typedef union {
   s_statementbody_block *block;
   s_statementbody_for *_for;
   s_statementbody_while *_while;
+  s_statementbody_return *_return;
   s_statementbody_field_def *field_def;
   s_statementbody_method_def *method_def;
   s_statementbody_argument_def *argument_def;
@@ -227,7 +247,7 @@ struct _s_statement {
   s_scope *scope;
   u_statementbody body;
   e_statementtype type;
-  void (*exe_cb)(s_class_instance *, struct _s_statement *);
+  e_statementend (*exe_cb)(s_class_instance *, struct _s_statement *);
 };
 
 /* ##### Symbols ##### */
@@ -384,8 +404,10 @@ struct _s_expression_operation {
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type);
 
-s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, int level);
+s_expression_operation *expression_Step(s_compiler *compiler, s_scope *scope, s_list *operations, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
+
+
 
 /* ##### FIELD ##### */
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement);
@@ -420,6 +442,8 @@ int method_ComputeHash(s_method_def *method);
 s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
 s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent);
 
+s_method_def *method_FindOverload(s_symbol *method, s_list *args);
+
 /* ##### CLASS ##### */
 struct _s_class_instance {
   s_symbol *class;
@@ -432,7 +456,7 @@ s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s
 
 s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
 
-s_method_def *class_FindMethod(s_symbol *class, char *name, s_list *args);
+s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args);
 
 s_class_instance *class_CreateInstance(s_symbol *class);
 
@@ -451,16 +475,18 @@ s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method
 void __core_argument_def(s_statement *statement);
 void __core_field_def(s_statement *statement);
 
-void __core_expression(s_class_instance *self, s_statement *statement);
+e_statementend __core_expression(s_class_instance *self, s_statement *statement);
 
 
 
-void __core_exe_statement(s_class_instance *self, s_statement *statement);
+e_statementend __core_exe_statement(s_class_instance *self, s_statement *statement);
 
-void __core_if(s_statement *statement);
-void __core_for(s_statement *statement);
-void __core_while(s_class_instance *self, s_statement *statement);
-void __core_debug(s_class_instance *self, s_statement *statement);
+e_statementend __core_if(s_statement *statement);
+e_statementend __core_for(s_statement *statement);
+e_statementend __core_while(s_class_instance *self, s_statement *statement);
+e_statementend __core_return(s_class_instance *self, s_statement *statement);
+
+e_statementend __core_debug(s_class_instance *self, s_statement *statement);
 
 // Symbols actions
 //void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
