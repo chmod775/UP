@@ -129,9 +129,9 @@ typedef enum {
 
   TOKEN_CommentBlock_End,
 
-  TOKEN_This,
+  TOKEN_This, TOKEN_Return,
 
-  TOKEN_If, TOKEN_Else, TOKEN_Return, TOKEN_While, TOKEN_For, TOKEN_Switch,
+  TOKEN_If, TOKEN_Else, TOKEN_While, TOKEN_For, TOKEN_Switch,
   TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak, TOKEN_Dot
 } e_token;
 
@@ -211,6 +211,7 @@ typedef struct {
 
 typedef struct {
   s_symbol *symbol;
+  s_method_def *method;
 } s_statementbody_method_def;
 
 typedef struct {
@@ -315,6 +316,8 @@ s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token);
 
 s_symbol *symbol_Find(char *name, s_parlist *symbols);
 
+bool symbol_Equal(s_symbol *a, s_symbol *b);
+
 /* ##### Scope ##### */
 s_scope *scope_Create(s_scope *parent);
 s_scope *scope_CreateAsRoot();
@@ -388,7 +391,8 @@ typedef enum {
   OP_AccessSymbol,
   OP_ConstructorCall,
   OP_MethodCall,
-  OP_UseTemporaryInstance
+  OP_UseTemporaryInstance,
+  OP_LoadThis
 } e_expression_operation_type;
 
 typedef union {
@@ -404,7 +408,7 @@ struct _s_expression_operation {
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type);
 
-s_expression_operation *expression_Step(s_compiler *compiler, s_scope *scope, s_list *operations, int level);
+s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, s_scope *scope, s_list *operations, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 
 
@@ -422,7 +426,7 @@ typedef enum {
 
 typedef union {
   s_statement *statement;
-  s_class_instance *(*callback)(s_class_instance *self, s_class_instance **args);
+  void (*callback)(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
 } u_methodbody_content;
 
 typedef struct {
@@ -452,9 +456,9 @@ struct _s_class_instance {
 
 s_symbol *class_Create(char *name, s_scope *scope);
 
-s_method_def *class_CreateConstructor(s_symbol *class, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), int nArguments, ...);
+s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, s_class_instance *(*cb)(s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
+s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
 
 s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args);
 
@@ -470,10 +474,10 @@ s_stack__s_class_instance_ptr stack;
 s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement);
 
 void __core_class_createInstance(s_statement *statement);
-s_class_instance *__core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance **args);
+void __core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args);
 
-void __core_argument_def(s_statement *statement);
-void __core_field_def(s_statement *statement);
+e_statementend __core_argument_def(s_statement *statement);
+e_statementend __core_field_def(s_statement *statement);
 
 e_statementend __core_expression(s_class_instance *self, s_statement *statement);
 

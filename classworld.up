@@ -1,38 +1,71 @@
 
 Boia {
-  a : Number = 10;
+  a : Number = Number(10);
 
-  () {
-
+  (val : Number) {
+    this.a = val;
   }
-  
-  Value() : Number { 
-    return Number(1);
+
+  Show() {
+    this.a.Print();
+  }
+
+  Assign(src : Boia) : Boia {
+    this.a = src.a;
+    return.a = this.a;
+  }
+
+  Add(src : Boia) {
+    //return.a = this.a + src.a;
   }
 }
 
 Car {
-  motor : Boia = Boia();
+  motor : Boia = Boia(1);
 
-  () {}
+  () {
+  }
 
   GetMotor() : Boia {
-    return motor;
+    //return this.motor;
   }
 }
 
-t1 : Boia = Boia();
+t1 : Boia = Boia(345);
+t2 : Boia = Boia(789);
 
-//c1 : Car = Car();
+c1 : Car = Car();
+c2 : Car = Car();
 
 Main() {
-  (1 + 2).Print();
+  //(1 + 2).Print();
+
+  this.t1.Show();
+  this.t2.Show();
+
+  this.t1 = this.t2;
+
+  this.t1.Show();
+
+  this.t2.a = 333;
+  this.t2.Show();
+  this.t1.Show();
+
+/*
+  this.t1.a.Print();
+
+  this.c1.motor.a.Print();
+  this.c1.motor.a = 999;
+  this.c1.motor.a.Print();
+
+  this.c2.motor.a.Print();
+
+  this.t1.a.Print();
 
   (t1.Value() + t1.Value() + t1.a).Print();
-
+  
   t1.a.Print();
   t1.Value().Print();
-/*
   c1.motor.Value().Print();
   c1.motor.a.Print();
   c1.GetMotor().a.Print();
