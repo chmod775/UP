@@ -9,4 +9,4 @@ v0.3
   - List and Dictionary classes
   - FOR statement
   - SWITCH statement
-  - 
+  - '->' and '<-' link operation (like pointers. Copy address and point to class instance)

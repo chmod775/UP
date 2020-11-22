@@ -113,4 +113,11 @@ print('Value of {a} is: {pi}');
 c : String;
 c = '{a} {b} {pi}';
 print(c);
+
+// Linking (like pointers)
+c1 : Number = Number(10);
+c2 : Number <- NULL;
+
+c1->c2;
+c2<-c1;
 */

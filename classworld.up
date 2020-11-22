@@ -2,6 +2,8 @@
 Boia {
   a : Number = Number(10);
 
+  () {}
+
   (val : Number) {
     this.a = val;
   }
@@ -15,8 +17,12 @@ Boia {
     return.a = this.a;
   }
 
-  Add(src : Boia) {
-    //return.a = this.a + src.a;
+  Add(src : Boia) : Boia {
+    return.a = this.a + src.a;
+  }
+
+  Load(val : Number) {
+    this.a = val;
   }
 }
 
@@ -31,18 +37,28 @@ Car {
   }
 }
 
-t1 : Boia = Boia(345);
-t2 : Boia = Boia(789);
+t1 : Boia = Boia();
+t2 : Boia = Boia();
+t3 : Boia = Boia();
 
 c1 : Car = Car();
 c2 : Car = Car();
 
 Main() {
   //(1 + 2).Print();
+  this.t1.Load(123);
+
+  this.t3 = this.t2 = this.t1;
 
   this.t1.Show();
   this.t2.Show();
 
+  (this.t1 + this.t2).Show();
+
+  //this.t3 = this.t1 + this.t2;
+  this.t3.Show();
+
+/*
   this.t1 = this.t2;
 
   this.t1.Show();
@@ -51,7 +67,6 @@ Main() {
   this.t2.Show();
   this.t1.Show();
 
-/*
   this.t1.a.Print();
 
   this.c1.motor.a.Print();

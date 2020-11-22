@@ -824,7 +824,7 @@ void compiler_Execute(s_compiler *compiler) {
   s_list *args = list_create();
   s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
 
-  __core_exe_method(programInstance, mainMethod, NULL, args);
+  __exe_method(programInstance, mainMethod, NULL, args);
 }
 
 void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
@@ -904,12 +904,15 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     op->payload.temporary = number;
 
     match(scope, TOKEN_Literal_Int);
+
   } else if (token.type == TOKEN_Literal_Real) {
     // TODO
-    match(scope, TOKEN_Literal_Real);    
+    match(scope, TOKEN_Literal_Real);
+
   } else if (token.type == TOKEN_Literal_String) {
     // TODO
     match(scope, TOKEN_Literal_String);
+
   } else if (token.type == TOKEN_Return) {
     // Find parent method (return keyword)
     s_statement *parent_statement = statement;
@@ -923,6 +926,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
     if (method->ret_type == NULL)
       CERROR(compiler, "expression_Step", "Cannot return in a void method.");
+
+    op = expression_Emit(operations, OP_LoadReturn);
+    op->payload.symbol = method->ret_type; // Useless ?
 
     match(scope, TOKEN_Return);
   } else if (token.type == TOKEN_This) {
@@ -938,6 +944,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     op->payload.symbol = parent_statement->body.class_def->symbol;
 
     match(scope, TOKEN_This);
+
   } else if (token.type == TOKEN_Symbol) {
     s_symbol *symbol = token.content.symbol;
     if (symbol->type == SYMBOL_NOTDEFINED)
@@ -1035,7 +1042,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       s_scope *parent_scope = scope;
 
       s_expression_operation *last_op = op;
-      if ((last_op->type == OP_AccessSymbol) || (last_op->type == OP_LoadThis)) {
+      if ((last_op->type == OP_AccessSymbol) || (last_op->type == OP_LoadThis) || (last_op->type == OP_LoadReturn)) {
         s_symbol *op_symbol = last_op->payload.symbol;
         if (op_symbol->type == SYMBOL_FIELD) {
           parent_scope = op_symbol->body.field->value.type->body.class->scope;
@@ -1758,94 +1765,77 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
 #undef token
 
 /* ##### CORE Libs ##### */
-e_statementend __core_field_def(s_statement *statement) {
+e_statementend __core_field_def(s_exe_scope exe) {
 	PANALYSIS("__core_field_def");
   return STATEMENT_END_CONTINUE;
 }
 
-e_statementend __core_argument_def(s_statement *statement) {
+e_statementend __core_argument_def(s_exe_scope exe) {
 	PANALYSIS("__core_argument_def");
   return STATEMENT_END_CONTINUE;
 }
 
-e_statementend __core_expression(s_class_instance *self, s_statement *statement) {
+e_statementend __core_expression(s_exe_scope exe) {
 	PANALYSIS("__core_expression");
-  __core_exe_expression(self, statement);
+  __core_exe_expression(exe);
   return STATEMENT_END_CONTINUE;
 }
 
-e_statementend __core_exe_statement(s_class_instance *self, s_statement *statement) {
+e_statementend __core_exe_statement(s_exe_scope exe) {
 	PANALYSIS("__core_exe_statement");
   u_int64_t pre_stack_ptr = stack.ptr;
 
   e_statementend ret = STATEMENT_END_CONTINUE;
 
-  if (statement != NULL) {
-    if (statement->type == STATEMENT_BLOCK) {
-      s_statementbody_block *statement_body = statement->body.block;
+  if (exe.statement != NULL) {
+    if (exe.statement->type == STATEMENT_BLOCK) {
+      s_statementbody_block *statement_body = exe.statement->body.block;
 
       s_statement *sub_statement = list_read_first(statement_body->statements);
       do {
-        ret = __core_exe_statement(self, sub_statement);
+        ret = __core_exe_statement(SUB_EXE_SCOPE(exe, sub_statement));
         if (ret != STATEMENT_END_CONTINUE)
           break;
         sub_statement = list_read_next(statement_body->statements);
       } while (sub_statement != NULL);
     } else {
-      if (statement->exe_cb)
-        ret = statement->exe_cb(self, statement);
+      if (exe.statement->exe_cb)
+        ret = exe.statement->exe_cb(exe);
     }
   }
 
-  if (ret == STATEMENT_END_RETURN) {
-    s_class_instance *return_value = stack_pop__s_class_instance_ptr(&stack);
-    stack.ptr = pre_stack_ptr;
-    stack_push__s_class_instance_ptr(&stack, return_value);
-  } else {
-    stack.ptr = pre_stack_ptr;
-  }
+  stack.ptr = pre_stack_ptr;
 
   return ret;
 }
 
-e_statementend __core_debug(s_class_instance *self, s_statement *statement) {
+e_statementend __core_debug(s_exe_scope exe) {
 	PANALYSIS("__core_debug");
   int a = 0;
   return STATEMENT_END_CONTINUE;
 }
 
-e_statementend __core_while(s_class_instance *self, s_statement *statement) {
+e_statementend __core_while(s_exe_scope exe) {
 	PANALYSIS("__core_while");
-  if (statement->type != STATEMENT_WHILE) PERROR("__core_while", "Wrong statement type");
+  if (exe.statement->type != STATEMENT_WHILE) PERROR("__core_while", "Wrong statement type");
 
-  s_statementbody_while *statement_body = statement->body._while;
+  s_statementbody_while *statement_body = exe.statement->body._while;
 
-  s_class_instance *check_result = __core_exe_expression(self, statement_body->check);
+  s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
 
   while (check_result->data) {
-    e_statementend ret = __core_exe_statement(self, statement_body->loop);
+    e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
     if (ret != STATEMENT_END_CONTINUE)
       break;
-    check_result = __core_exe_expression(self, statement_body->check);
+
+    check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
   }
 
   return STATEMENT_END_CONTINUE;
 }
 
-e_statementend __core_return(s_class_instance *self, s_statement *statement) {
-	PANALYSIS("__core_return");
-  if (statement->type != STATEMENT_RETURN) PERROR("__core_return", "Wrong statement type");
-
-  s_statementbody_return *statement_body = statement->body._return;
-  s_class_instance *result_value = __core_exe_expression(self, statement_body->value);
-
-  stack_push__s_class_instance_ptr(&stack, result_value);
-
-  return STATEMENT_END_RETURN;
-}
-
-void __core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args) {
-	PANALYSIS("__core_exe_method");
+void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args) {
+	PANALYSIS("__exe_method");
   if (method->body.type == METHODBODY_STATEMENT) {
     // Map arguments value
     u_int64_t arg_index = 0;
@@ -1855,19 +1845,19 @@ void __core_exe_method(s_class_instance *self, s_method_def *method, s_class_ins
       arg = list_read_next(method->arguments);
       arg_index++;
     }
-    e_statementend ret = __core_exe_statement(self, method->body.content.statement);
+    e_statementend ret = __core_exe_statement(EXE_SCOPE(return_instance, self, method->body.content.statement));
   } else if (method->body.type == METHODBODY_CALLBACK) {
     method->body.content.callback(return_instance, self, args);
   } else {
-    PERROR("__core_exe_expression", "Method type error.");
+    PERROR("__exe_method", "Method type error.");
   }
 }
 
-s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement) {
+s_class_instance *__core_exe_expression(s_exe_scope exe) {
 	PANALYSIS("__core_exe_expression");
-  if (statement->type != STATEMENT_EXPRESSION) PERROR("__core_exe_expression", "Wrong statement type");
+  if (exe.statement->type != STATEMENT_EXPRESSION) PERROR("__core_exe_expression", "Wrong statement type");
 
-  s_list *operations = statement->body.expression->operations;
+  s_list *operations = exe.statement->body.expression->operations;
 
   s_class_instance *args[32];
 
@@ -1891,8 +1881,10 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
       stack_push__s_class_instance_ptr(&stack, value);
     } else if (op->type == OP_UseTemporaryInstance) {
       stack_push__s_class_instance_ptr(&stack, op->payload.temporary);
+    } else if (op->type == OP_LoadReturn) {
+      stack_push__s_class_instance_ptr(&stack, exe.ret);
     } else if (op->type == OP_LoadThis) {
-      stack_push__s_class_instance_ptr(&stack, self);
+      stack_push__s_class_instance_ptr(&stack, exe.self);
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       // Pop return instance from stack (or create new one in case of constructor)
       s_class_instance *ret = NULL;
@@ -1918,9 +1910,9 @@ s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *sta
       s_class_instance *target = NULL;
       if (op->type == OP_MethodCall) {
         target = stack_pop__s_class_instance_ptr(&stack);
-        __core_exe_method(target, op->payload.method, ret, args);
+        __exe_method(target, op->payload.method, ret, args);
       } else if (op->type == OP_ConstructorCall) {
-        __core_exe_method(ret, op->payload.method, ret, args);
+        __exe_method(ret, op->payload.method, ret, args);
       }
 
       // Push return instance (if present)
@@ -1955,7 +1947,7 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   // Initialize fields
   s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
   while (field_symbol != NULL) {
-    s_class_instance *init_value = __core_exe_expression(instance, field_symbol->body.field->init_expression);
+    s_class_instance *init_value = __core_exe_expression(EXE_SCOPE(NULL, instance, field_symbol->body.field->init_expression));
     instance->data[field_symbol->body.field->value.data_index] = init_value;
 
     field_symbol = list_read_next(instance->class->body.class->fields);

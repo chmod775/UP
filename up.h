@@ -141,6 +141,8 @@ typedef struct _s_symbol s_symbol;
 typedef struct _s_class_instance s_class_instance;
 typedef struct _s_expression_operation s_expression_operation;
 
+typedef struct _s_exe_scope s_exe_scope;
+
 typedef struct _s_symbol s_anytype;
 
 typedef struct {
@@ -248,7 +250,7 @@ struct _s_statement {
   s_scope *scope;
   u_statementbody body;
   e_statementtype type;
-  e_statementend (*exe_cb)(s_class_instance *, struct _s_statement *);
+  e_statementend (*exe_cb)(s_exe_scope);
 };
 
 /* ##### Symbols ##### */
@@ -392,7 +394,8 @@ typedef enum {
   OP_ConstructorCall,
   OP_MethodCall,
   OP_UseTemporaryInstance,
-  OP_LoadThis
+  OP_LoadThis,
+  OP_LoadReturn
 } e_expression_operation_type;
 
 typedef union {
@@ -454,6 +457,15 @@ struct _s_class_instance {
   s_class_instance **data;
 };
 
+struct _s_exe_scope {
+  s_class_instance *ret;
+  s_class_instance *self;
+  s_statement *statement;
+};
+
+#define EXE_SCOPE(RET,SELF,STATEMENT) (s_exe_scope) { .ret = (RET), .self = (SELF), .statement = (STATEMENT) }
+#define SUB_EXE_SCOPE(EXE,STATEMENT) (s_exe_scope) { .ret = (EXE.ret), .self = (EXE.self), .statement = (STATEMENT) }
+
 s_symbol *class_Create(char *name, s_scope *scope);
 
 s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
@@ -471,26 +483,23 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 define_stack(s_class_instance *, s_class_instance_ptr);
 s_stack__s_class_instance_ptr stack;
 
-s_class_instance *__core_exe_expression(s_class_instance *self, s_statement *statement);
-
 void __core_class_createInstance(s_statement *statement);
 void __core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args);
 
-e_statementend __core_argument_def(s_statement *statement);
-e_statementend __core_field_def(s_statement *statement);
+s_class_instance *__core_exe_expression(s_exe_scope exe);
 
-e_statementend __core_expression(s_class_instance *self, s_statement *statement);
+e_statementend __core_argument_def(s_exe_scope exe);
+e_statementend __core_field_def(s_exe_scope exe);
 
+e_statementend __core_expression(s_exe_scope exe);
 
+e_statementend __core_exe_statement(s_exe_scope exe);
 
-e_statementend __core_exe_statement(s_class_instance *self, s_statement *statement);
+e_statementend __core_if(s_exe_scope exe);
+e_statementend __core_for(s_exe_scope exe);
+e_statementend __core_while(s_exe_scope exe);
 
-e_statementend __core_if(s_statement *statement);
-e_statementend __core_for(s_statement *statement);
-e_statementend __core_while(s_class_instance *self, s_statement *statement);
-e_statementend __core_return(s_class_instance *self, s_statement *statement);
-
-e_statementend __core_debug(s_class_instance *self, s_statement *statement);
+e_statementend __core_debug(s_exe_scope exe);
 
 // Symbols actions
 //void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
