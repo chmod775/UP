@@ -10,3 +10,5 @@ v0.3
   - FOR statement
   - SWITCH statement
   - '->' and '<-' link operation (like pointers. Copy address and point to class instance)
+  [BUG]- (this + "a").Print(); 
+

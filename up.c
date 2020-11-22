@@ -454,7 +454,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
 
   int64_t token_val_int;
   double token_val_decimal;
-  char *token_val_string;
+  char *token_val_string = (char *)malloc(sizeof(char) * 128);
 
   while (token = *src) {
     ++src;
@@ -530,33 +530,24 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       ret(TOKEN_Literal_Int, token_val_int, integer);
     }
     else if (token == '"' || token == '\'') {
-      // parse string literal, currently, the only supported escape
-      // character is '\n', store the string literal into data.
-      /*
-      last_pos = data;
+      char *token_val_string_ptr = token_val_string;
       while (*src != 0 && *src != token) {
-          token_val = *src++;
-          if (token_val == '\\') {
-              // escape character
-              token_val = *src++;
-              if (token_val == 'n') {
-                  token_val = '\n';
-              }
+        char ch = *src++;
+        if (ch == '\\') {
+          // escape character
+          ch = *src++;
+          if (ch == 'n') {
+            ch = '\n';
           }
+        }
 
-          if (token == '"') {
-              *data++ = token_val;
-          }
+        *token_val_string_ptr = ch;
+        token_val_string_ptr++;
       }
 
       src++;
-      // if it is a single character, return Num token
-      if (token == '"') {
-          token_val = (int)last_pos;
-      } else {
-          ret(Num, NULL, NULL);
-      }
-      */
+
+      ret(TOKEN_Literal_String, token_val_string, string);
     }
     else if (token == '/') {
       if (*src == '/') {
@@ -824,7 +815,7 @@ void compiler_Execute(s_compiler *compiler) {
   s_list *args = list_create();
   s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
 
-  __exe_method(programInstance, mainMethod, NULL, args);
+  __exe_method(programInstance, mainMethod, NULL, NULL);
 }
 
 void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
@@ -895,7 +886,6 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
   // Unary operators
   if (token.type == TOKEN_Literal_Int) {
-    // TODO
     s_class_instance *number = class_CreateInstance(LIB_NumberClass);
     number->data = malloc(sizeof(u_int64_t));
     number->data = token.content.integer;
@@ -910,7 +900,13 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     match(scope, TOKEN_Literal_Real);
 
   } else if (token.type == TOKEN_Literal_String) {
-    // TODO
+    s_class_instance *string = class_CreateInstance(LIB_StringClass);
+    string->data = malloc(sizeof(char) * strlen(token.content.string));
+    strcpy(string->data, token.content.string);
+
+    op = expression_Emit(operations, OP_UseTemporaryInstance);
+    op->payload.temporary = string;
+
     match(scope, TOKEN_Literal_String);
 
   } else if (token.type == TOKEN_Return) {
@@ -1261,7 +1257,7 @@ s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
 s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args) {
 	PANALYSIS("class_FindMethodByName");
   if (class == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
-  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol is not a Class.");
+  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol is not a class.");
   if (name == NULL) PERROR("class_FindMethodByName", "Name cannot be null.");
 
   s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
@@ -1960,7 +1956,7 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
   self->data = malloc(sizeof(u_int64_t));
-  self->data = 0;
+  *self->data = 0;
 }
 void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
@@ -1989,22 +1985,60 @@ void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class
   self->data = arg_B->data;
 }
 
-void number_Assign_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Assign_Print");
+void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Print");
   printf("%lu\n", self->data);
+}
+
+
+void string_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("string_Constructor");
+  self->data = malloc(sizeof(char));
+  *self->data = 0x00;
+}
+void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("string_Constructor");
+  s_class_instance *arg_B = args[0];
+
+  self->data = malloc(sizeof(char) * strlen(arg_B->data));
+  strcpy(self->data, arg_B->data);
+}
+
+void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("string_Add_String");
+  s_class_instance *arg_B = args[0];
+
+  u_int64_t len = strlen(self->data) + strlen(arg_B->data);
+
+  ret->data = malloc(sizeof(char) * len);
+  strcpy(ret->data, self->data);
+  strcat(ret->data, arg_B->data);
+}
+
+void string_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("string_Print");
+  printf("%s\n", self->data);
 }
 
 void stdlib_Init(s_compiler *compiler) {
 	PANALYSIS("stdlib_Init");
+  /* ##### Number class ##### */
   LIB_NumberClass = class_Create("Number", compiler->rootScope);
-  // class_CreateField(LIB_NumberClass, "raw", NULL, sizeof(u_int64_t));
   class_CreateConstructor(LIB_NumberClass, &number_Constructor, 0);
-  class_CreateConstructor(LIB_NumberClass, &number_Constructor_Number, 1, NULL);
+  class_CreateConstructor(LIB_NumberClass, &number_Constructor_Number, 1, "Number");
 
   class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
-  class_CreateMethod(LIB_NumberClass, "Print", &number_Assign_Print, NULL, 0);
+  class_CreateMethod(LIB_NumberClass, "Print", &number_Print, NULL, 0);
+
+  /* ##### String class ##### */
+  LIB_StringClass = class_Create("String", compiler->rootScope);
+  class_CreateConstructor(LIB_StringClass, &string_Constructor, 0);
+  class_CreateConstructor(LIB_StringClass, &string_Constructor_String, 1, "String");
+
+  class_CreateMethod(LIB_StringClass, "Add", &string_Add_String, "String", 1, "String");
+  class_CreateMethod(LIB_StringClass, "Print", &string_Print, NULL, 0);
 }
 
 

@@ -37,12 +37,30 @@ Car {
   }
 }
 
+String {
+  a : Number = 775;
+
+  Show() {
+    //this.a.Print();
+  }
+}
+
 t1 : Boia = Boia();
 t2 : Boia = Boia();
 t3 : Boia = Boia();
 
 c1 : Car = Car();
 c2 : Car = Car();
+
+s1 : String = "Hello";
+s2 : String = "world";
+
+//r1 : Number = 3.1415;
+
+Echo() {
+  (this.s1 + " " + this.s2 + "!").Print();
+  (this.t1 + this.t2).Show();
+}
 
 Main() {
   //(1 + 2).Print();
@@ -53,12 +71,19 @@ Main() {
   this.t1.Show();
   this.t2.Show();
 
-  (this.t1 + this.t2).Show();
-
   //this.t3 = this.t1 + this.t2;
   this.t3.Show();
 
+  this.s1.Print();
+  this.s2.Show();
+
+  //this.s1.a.Print();
 /*
+
+  this.Echo();
+  this.Echo();
+  this.Echo();
+
   this.t1 = this.t2;
 
   this.t1.Show();

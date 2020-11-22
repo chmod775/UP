@@ -484,7 +484,7 @@ define_stack(s_class_instance *, s_class_instance_ptr);
 s_stack__s_class_instance_ptr stack;
 
 void __core_class_createInstance(s_statement *statement);
-void __core_exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args);
+void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args);
 
 s_class_instance *__core_exe_expression(s_exe_scope exe);
 
@@ -515,5 +515,6 @@ s_symbol *__core_class_get_field(s_symbol *class, char *fieldName);
 
 // Required lib classes
 s_symbol *LIB_NumberClass = NULL;
+s_symbol *LIB_StringClass = NULL;
 
 #endif
