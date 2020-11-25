@@ -11,4 +11,10 @@ v0.3
   - SWITCH statement
   - '->' and '<-' link operation (like pointers. Copy address and point to class instance)
   [BUG]- (this + "a").Print(); 
+  [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
 
+
+v?
+  - JSON export / import for every object
+  - Dump / Load all memory to a JSON (like saving a snapshot for old NES games)
+  - GIT like included features for "seamless" switch to changes in software (using above feature JSON dump/load)

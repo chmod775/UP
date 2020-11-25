@@ -22,8 +22,9 @@ bool startsUnderscore_String(char *str);
 
 /* ##### LINKED LIST ##### */
 typedef struct _s_list_item {
-  void *value;
+  struct _s_list_item *prev;
   struct _s_list_item *next;
+  void *payload;
 } s_list_item;
 
 typedef struct {
@@ -33,16 +34,17 @@ typedef struct {
 } s_list;
 
 s_list *list_create();
-void list_destroy(s_list *l);
+//void list_destroy(s_list *l);
 
-void *list_read_index(s_list *l, u_int64_t index);
+//void *list_read_index(s_list *l, u_int64_t index);
 void *list_read_first(s_list *l);
 void *list_read_last(s_list *l);
 void *list_read_next(s_list *l);
 void *list_read_previous(s_list *l);
+void *list_read_selected(s_list *l);
 
-void list_add(s_list *l, void *value);
-void *list_pull(s_list *l);
+//void list_add(s_list *l, void *value);
+//void *list_pull(s_list *l);
 
 void list_push(s_list *l, void *value);
 void *list_pop(s_list *l);
@@ -54,14 +56,14 @@ typedef struct {
 } s_parlist;
 
 s_parlist *parlist_create(s_parlist *parent);
-void parlist_destroy(s_parlist *pl);
+//void parlist_destroy(s_parlist *pl);
 
 void *parlist_read_first(s_parlist *pl);
 void *parlist_read_last(s_parlist *pl);
 void *parlist_read_next(s_parlist *pl);
 void *parlist_read_previous(s_parlist *pl);
 
-void parlist_add(s_parlist *pl, void *value);
+//void parlist_add(s_parlist *pl, void *value);
 
 void parlist_push(s_parlist *pl, void *value);
 
@@ -155,6 +157,11 @@ typedef struct {
   s_class_instance *data;
 } s_anyvalue_argument;
 
+typedef struct {
+  s_anytype *type;
+  s_list *instances;
+} s_anyvalue_local;
+
 /* ##### Scope ##### */
 typedef struct _s_scope {
   struct _s_scope *parent;
@@ -172,8 +179,9 @@ typedef enum {
   STATEMENT_WHILE,
   STATEMENT_RETURN,
   STATEMENT_FIELD_DEF,
-  STATEMENT_METHOD_DEF,
   STATEMENT_ARGUMENT_DEF,
+  STATEMENT_LOCAL_DEF,
+  STATEMENT_METHOD_DEF,
   STATEMENT_CLASS_DEF,
   STATEMENT_CONSTRUCTOR_DEF,
   STATEMENT_EXPRESSION,
@@ -189,8 +197,13 @@ typedef enum {
 
 typedef struct {
   s_list *statements; // <s_statement>
-  s_list *temporaries; // <s_class_instance>
 } s_statementbody_block;
+
+typedef struct {
+  s_statement *check;
+  s_statement *_true;
+  s_statement *_false;
+} s_statementbody_if;
 
 typedef struct {
   s_statement *init;
@@ -222,6 +235,10 @@ typedef struct {
 
 typedef struct {
   s_symbol *symbol;
+} s_statementbody_local_def;
+
+typedef struct {
+  s_symbol *symbol;
 } s_statementbody_class_def;
 
 typedef struct {
@@ -234,12 +251,14 @@ typedef struct {
 
 typedef union {
   s_statementbody_block *block;
+  s_statementbody_if *_if;
   s_statementbody_for *_for;
   s_statementbody_while *_while;
   s_statementbody_return *_return;
   s_statementbody_field_def *field_def;
-  s_statementbody_method_def *method_def;
   s_statementbody_argument_def *argument_def;
+  s_statementbody_argument_def *local_def;
+  s_statementbody_method_def *method_def;
   s_statementbody_class_def *class_def;
   s_statementbody_constructor_def *constructor_def;
   s_statementbody_expression *expression;
@@ -251,6 +270,7 @@ struct _s_statement {
   u_statementbody body;
   e_statementtype type;
   e_statementend (*exe_cb)(s_exe_scope);
+  s_list *temporaries; // <s_symbol>
 };
 
 /* ##### Symbols ##### */
@@ -260,6 +280,7 @@ typedef enum {
   SYMBOL_FIELD,
   SYMBOL_METHOD,
   SYMBOL_ARGUMENT,
+  SYMBOL_LOCAL,
   SYMBOL_CLASS
 } e_symboltype;
 
@@ -278,6 +299,11 @@ typedef struct {
 } s_symbolbody_argument;
 
 typedef struct {
+  s_anyvalue_local value;
+  s_statement *init_expression;
+} s_symbolbody_local;
+
+typedef struct {
   s_list *overloads; // <s_method_def>
 } s_symbolbody_method;
 
@@ -294,6 +320,7 @@ typedef union {
   s_symbolbody_field *field;
   s_symbolbody_method *method;
   s_symbolbody_argument *argument;
+  s_symbolbody_local *local;
   s_symbolbody_class *class;
 } u_symbolbody;
 
@@ -420,6 +447,7 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement);
 s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *parent);
 s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent);
+s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### METHOD ##### */
 typedef enum {
@@ -483,13 +511,14 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 define_stack(s_class_instance *, s_class_instance_ptr);
 s_stack__s_class_instance_ptr stack;
 
-void __core_class_createInstance(s_statement *statement);
+void __exe_initializeFieldInInstance(s_class_instance *instance, s_symbol *field_symbol);
 void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args);
 
 s_class_instance *__core_exe_expression(s_exe_scope exe);
 
 e_statementend __core_argument_def(s_exe_scope exe);
 e_statementend __core_field_def(s_exe_scope exe);
+e_statementend __core_local_def(s_exe_scope exe);
 
 e_statementend __core_expression(s_exe_scope exe);
 

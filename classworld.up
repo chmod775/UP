@@ -57,12 +57,37 @@ s2 : String = "world";
 
 //r1 : Number = 3.1415;
 
+cnt : Number = 0;
+
 Echo() {
-  (this.s1 + " " + this.s2 + "!").Print();
-  (this.t1 + this.t2).Show();
+//  (this.s1 + " " + this.s2 + "!").Print();
+//  (this.t1 + this.t2).Show();
+  l : Number = 10;
+
+  l = this.cnt;
+
+  this.cnt = this.cnt + 1;
+
+  if (this.cnt < 10)
+    this.Echo();
+
+  t : Number = 0;
+  t = 0;
+  while (t < 1000) {
+    i : Number = 0;
+    t = t + 1;
+  }
+
+  l.Print();
 }
 
 Main() {
+  this.cnt = 0;
+  this.Echo();
+  this.cnt = 0;
+  this.Echo();
+/*
+
   //(1 + 2).Print();
   this.t1.Load(123);
 
@@ -76,6 +101,10 @@ Main() {
 
   this.s1.Print();
   this.s2.Show();
+
+  l : Number = 10;
+*/
+
 
   //this.s1.a.Print();
 /*

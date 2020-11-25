@@ -70,151 +70,110 @@ s_list *list_create() {
   ret->selected_item = NULL;
   return ret;
 }
-void list_destroy(s_list *l) {
-	PANALYSIS("list_destroy");
-  void *last = list_read_last(l);
-  while (last != NULL) {
-    free(last);
-    last = list_read_previous(l);
-  }
-}
-
-void *list_read_index(s_list *l, u_int64_t index) {
-	PANALYSIS("list_read_index");
-  if (l->head_item == NULL) return NULL;
-
-  u_int64_t cnt = 0;
-
-  s_list_item *current = l->head_item;
-  while (cnt < index) {
-    if (current->next == NULL) return NULL;
-    current = current->next;
-    cnt++;
-  }
-
-  l->selected_item = current;
-
-  return l->selected_item->value;
-}
 
 #define LIST_READ_FIRST_FAST(L) L->selected_item = L->head_item;
+#define LIST_READ_NEXT_FAST(L) L->selected_item = L->selected_item->next;
 
 void *list_read_first(s_list *l) {
 	PANALYSIS("list_read_first");
+  s_list_item *head = l->head_item;
+  l->selected_item = head;
   if (l->head_item == NULL) return NULL;
-
-  l->selected_item = l->head_item;
-  return l->selected_item->value;
+  return l->selected_item->payload;
 }
 void *list_read_last(s_list *l) {
 	PANALYSIS("list_read_last");
-  if (l->head_item == NULL) return NULL;
-
-  l->selected_item = l->head_item;
-
-  if (l->selected_item->next == NULL) { // Only one item in the list
-    return l->selected_item->value;
+  s_list_item *head = l->head_item;
+  if (l->head_item == NULL) {
+    l->selected_item = head;
+    return NULL;
   }
 
-  // Get last item
-  while (l->selected_item->next != NULL) {
-    l->selected_item = l->selected_item->next;
-  }
-
-  return l->selected_item->value;
+  l->selected_item = head->prev;
+  return l->selected_item->payload;
 }
-
-#define LIST_READ_NEXT_FAST(L) L->selected_item = L->selected_item->next;
 
 void *list_read_next(s_list *l) {
 	PANALYSIS("list_read_next");
-  if (l->head_item == NULL) return NULL;
   if (l->selected_item == NULL) return NULL;
-  if (l->selected_item->next == NULL) return NULL;
+
+  s_list_item *head = l->head_item;
 
   l->selected_item = l->selected_item->next;
+  if (l->selected_item == head) {
+    l->selected_item = NULL;
+    return NULL;
+  }
 
-  return l->selected_item->value;
+  return l->selected_item->payload;
 }
 void *list_read_previous(s_list *l) {
 	PANALYSIS("list_read_previous");
-  if (l->head_item == NULL) return NULL;
   if (l->selected_item == NULL) return NULL;
 
-  s_list_item *current = l->head_item;
-  while (current->next != l->selected_item) {
-    current = current->next;
+  s_list_item *head = l->head_item;
+
+  l->selected_item = l->selected_item->prev;
+  if (l->selected_item == head->prev) {
+    l->selected_item = NULL;
+    return NULL;
   }
 
-  l->selected_item = current;
-
-  return l->selected_item->value;
+  return l->selected_item->payload;
 }
 
-void list_add(s_list *l, void *value) { // Add to the beginning
-  s_list_item *item = NEW(s_list_item);
-  item->value = value;
+void *list_read_selected(s_list *l) {
+	PANALYSIS("list_read_selected");
+  if (l->selected_item == NULL) return NULL;
+  return l->selected_item->payload;
+}
 
-  s_list_item *old = l->head_item;
-  l->head_item = item;
-  item->next = old;
+void list_push(s_list *l, void *value) {
+	PANALYSIS("list_push");
+  s_list_item *new = NEW(s_list_item);
+  new->payload = value;
 
   l->items_count++;
-}
-void *list_pull(s_list *l) { // Pull item from the beginning
-  if (l->head_item == NULL) return NULL;
 
-  s_list_item *item = l->head_item;
-  l->head_item = item->next;
-  void *ret = item->value;
-
-  free(item);
-
-  l->items_count--;
-  return ret;
-}
-
-void list_push(s_list *l, void *value) { // Push to the end
-  s_list_item *item = NEW(s_list_item);
-  item->value = value;
-  item->next = NULL;
-
-  if (l->head_item == NULL)
-    l->head_item = item;
-  else {
-    s_list_item *current = l->head_item;
-    while (current->next != NULL) {
-      current = current->next;
-    }
-    current->next = item;
+  if (l->head_item == NULL) {
+    new->prev = new;
+    new->next = new;
+    l->head_item = new;
+    return;
   }
 
-  l->items_count++;
+  s_list_item *head = l->head_item;
+  s_list_item *prev = head->prev;
+
+  prev->next = new;
+  head->prev = new;
+
+  new->next = head;
+  new->prev = prev;
 }
-void *list_pop(s_list *l) { // Pop item from the end
-  if (l->head_item == NULL) return NULL;
+void *list_pop(s_list *l) {
+	PANALYSIS("list_pop");
+  s_list_item *head = l->head_item;
+  if (head == NULL) PERROR("list_pop", "Empty list.");
+  s_list_item *prev = head->prev;
 
   void *ret = NULL;
 
-  if (l->head_item->next == NULL) { // Only one item in the list
-    ret = l->head_item->value;
+  l->items_count--;
+
+  if (head->next == head) {
+    ret = l->head_item->payload;
     free(l->head_item);
     l->head_item = NULL;
-    l->items_count--;
     return ret;
   }
 
-  // Get second to last item
-  s_list_item *current = l->head_item;
-  while (current->next->next != NULL) {
-    current = current->next;
-  }
+  head->prev = prev->prev;
+  head->prev->next = head;
 
-  ret = current->next->value;
-  free(current->next);
-  current->next = NULL;
+  ret = prev->payload;
+  free(prev);
 
-  l->items_count--;
   return ret;
 }
 
@@ -241,6 +200,7 @@ s_parlist *parlist_create(s_parlist *parent) {
 
   return ret;
 }
+/*
 void parlist_destroy(s_parlist *pl) {
 	PANALYSIS("parlist_destroy");
   void *last = parlist_read_last(pl);
@@ -249,7 +209,7 @@ void parlist_destroy(s_parlist *pl) {
     last = parlist_read_previous(pl);
   }
 }
-
+*/
 void *parlist_read_first(s_parlist *pl) {
 	PANALYSIS("parlist_read_first");
   s_list *l = list_read_first(pl->lists);
@@ -290,13 +250,13 @@ void *parlist_read_previous(s_parlist *pl) {
 
   return ret;
 }
-
+/*
 void parlist_add(s_parlist *pl, void *value) {
 	PANALYSIS("parlist_add");
   s_list *l = list_read_first(pl->lists);
   list_add(l, value);
 }
-
+*/
 void parlist_push(s_parlist *pl, void *value) {
 	PANALYSIS("parlist_push");
   s_list *l = list_read_last(pl->lists);
@@ -704,7 +664,8 @@ s_statement *statement_Create(s_statement *parent, s_scope *scope, e_statementty
   ret->scope = scope;
 
   ret->type = type;
-  
+  ret->temporaries = list_create();
+
   return ret;
 }
 
@@ -716,6 +677,7 @@ s_statement *statement_CreateInside(s_statement *parent, e_statementtype type) {
   ret->scope = parent->scope;
 
   ret->type = type;
+  ret->temporaries = list_create();
   
   return ret;
 }
@@ -728,6 +690,7 @@ s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type)
   ret->scope = scope_Create(parent->scope);
 
   ret->type = type;
+  ret->temporaries = list_create();
 
   return ret;
 }
@@ -758,6 +721,8 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
   ret->body.class_def->symbol = class_Create("Program", compiler->rootScope);
 
   ret->scope = ret->body.class_def->symbol->body.class->scope;
+
+  ret->temporaries = list_create();
 
   return ret;
 }
@@ -1046,6 +1011,8 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
           parent_scope = op_symbol->body.argument->value.type->body.class->scope;
         } else if (op_symbol->type == SYMBOL_CLASS) {
           parent_scope = op_symbol->body.class->scope;
+        } else if (op_symbol->type == SYMBOL_LOCAL) {
+          parent_scope = op_symbol->body.local->value.type->body.class->scope;
         } else {
           CERROR(compiler, "expression_Step", "Access symbol is not valid.");
         }
@@ -1234,6 +1201,29 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
 
   va_end(valist);
 }
+
+s_class_instance *class_CreateInstance(s_symbol *class) {
+	PANALYSIS("class_CreateInstance");
+  if (class->type != SYMBOL_CLASS) PERROR("class_CreateInstance", "Wrong statement type");
+
+  s_class_instance *instance = NEW(s_class_instance);
+  instance->class = class;
+
+  // Allocate data space
+  instance->data = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
+
+  // Initialize fields
+  s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
+  while (field_symbol != NULL) {
+    s_class_instance *init_value = __core_exe_expression(EXE_SCOPE(NULL, instance, field_symbol->body.field->init_expression));
+    instance->data[field_symbol->body.field->value.data_index] = init_value;
+
+    field_symbol = list_read_next(instance->class->body.class->fields);
+  }
+
+  return instance;
+}
+
 
 s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
 	PANALYSIS("method_FindOverload");
@@ -1479,6 +1469,9 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
     m = list_read_next(name->body.method->overloads);
   }
 
+  // Push to overloads
+  list_push(name->body.method->overloads, newMethod);
+
   // Get body statement for method
   match(ret_statement->scope, '{');
 
@@ -1488,9 +1481,6 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   }
 
   match(parent->scope, '}');
-
-  // Push to overloads
-  list_push(name->body.method->overloads, newMethod);
 
   return ret;
 }
@@ -1613,6 +1603,61 @@ s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) 
   return ret;
 }
 
+s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *parent) {
+	PANALYSIS("compile_LocalFieldDefinition");
+
+  s_symbol *name = token.content.symbol;
+  if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_LocalFieldDefinition", "Symbol already defined.");
+
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_LOCAL_DEF);
+  ret->exe_cb = &__core_local_def;
+
+  match(ret->scope, TOKEN_Symbol);
+
+  // Create statement body
+  ret->body.local_def = NEW(s_statementbody_local_def);
+  ret->body.local_def->symbol = name;
+
+  match(ret->scope, ':');
+
+  // Create symbol body
+  name->body.local = NEW(s_symbolbody_local);
+  name->type = SYMBOL_LOCAL;
+
+  name->body.local->value.type = compile_FieldType(compiler, ret);
+  name->body.local->value.instances = list_create();
+  list_push(name->body.local->value.instances, class_CreateInstance(name->body.local->value.type));
+
+  // Init expression
+  name->body.local->init_expression = NULL;
+  if (token.type == TOKEN_Assign) {
+    match(ret->scope, TOKEN_Assign);
+
+    name->body.local->init_expression = compile_Expression(compiler, ret);
+  }
+  if (ret->body.local_def->symbol->body.local->init_expression == NULL) CERROR(compiler, "compile_LocalFieldDefinition", "Field must have an initiliazation value.");
+
+  // Push to temporaries list in parent statement (used for garbage collection)
+  list_push(parent->temporaries, name);
+
+  return ret;
+}
+
+s_statement *compile_If(s_compiler *compiler, s_statement *parent) {
+	PANALYSIS("compile_If");
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_IF);
+  ret->exe_cb = &__core_if;
+
+  match(ret->scope, TOKEN_If);
+
+  ret->body._if = NEW(s_statementbody_if);
+
+  ret->body._if->check = compile_Expression(compiler, ret);
+  ret->body._if->_true = compile_Statement(compiler, ret);
+
+  return ret;
+}
+
 s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_For");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_FOR);
@@ -1699,7 +1744,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   s_statement *ret = NULL;
 
   if (token.type == TOKEN_If) {
-
+    ret = compile_If(compiler, parent);
   } else if (token.type == TOKEN_For) {
 
   } else if (token.type == TOKEN_Debug) {
@@ -1724,26 +1769,16 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     // Empty statement
     match(parent->scope, ';');
   } else if (token.type == TOKEN_Symbol) {
-    if (token.content.symbol->isUppercase) { // Method or Class
+    s_token next_token = preview(parent->scope);
+
+    if (next_token.type == ':') {
+      // Field definition
+      ret = compile_LocalFieldDefinition(compiler, parent);
+      match(parent->scope, ';');
+    } else {
       // Expression (espresso ?)
       ret = compile_Expression(compiler, parent);
       match(parent->scope, ';');
-    } else if (token.content.symbol->isFullcase) { // Constant property
-
-    } else if (token.content.symbol->startsUnderscore) { // Private property
-
-    } else {
-      s_token next_token = preview(parent->scope);
-
-      if (next_token.type == ':') {
-        // Field definition
-        ret = compile_FieldDefinition(compiler, parent);
-        match(parent->scope, ';');
-      } else {
-        // Expression (espresso ?)
-        ret = compile_Expression(compiler, parent);
-        match(parent->scope, ';');
-      }
     }
   } else {
     // Expression (espresso ?)
@@ -1771,6 +1806,25 @@ e_statementend __core_argument_def(s_exe_scope exe) {
   return STATEMENT_END_CONTINUE;
 }
 
+e_statementend __core_local_def(s_exe_scope exe) {
+	PANALYSIS("__core_local_def");
+
+  s_list *instances = exe.statement->body.local_def->symbol->body.local->value.instances;
+
+  if (instances->selected_item == NULL) {
+    list_read_first(instances);
+  } else {
+    s_class_instance *ret = list_read_next(instances);
+    if (ret == NULL) {
+      ret = class_CreateInstance(exe.statement->body.local_def->symbol->body.local->value.type);
+      list_push(instances, ret);
+      list_read_last(instances);
+    }
+  }
+
+  return STATEMENT_END_CONTINUE;
+}
+
 e_statementend __core_expression(s_exe_scope exe) {
 	PANALYSIS("__core_expression");
   __core_exe_expression(exe);
@@ -1787,16 +1841,27 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
     if (exe.statement->type == STATEMENT_BLOCK) {
       s_statementbody_block *statement_body = exe.statement->body.block;
 
-      s_statement *sub_statement = list_read_first(statement_body->statements);
+      s_list statements = *statement_body->statements; // Added list as local reference otherwise with a global selected_item we cannot execute different call stack statemtn pointers
+
+      s_statement *sub_statement = list_read_first(&statements);
       do {
         ret = __core_exe_statement(SUB_EXE_SCOPE(exe, sub_statement));
         if (ret != STATEMENT_END_CONTINUE)
           break;
-        sub_statement = list_read_next(statement_body->statements);
+        sub_statement = list_read_next(&statements);
       } while (sub_statement != NULL);
     } else {
       if (exe.statement->exe_cb)
         ret = exe.statement->exe_cb(exe);
+    }
+
+    s_symbol *temp_symbol = list_read_first(exe.statement->temporaries);
+    while (temp_symbol != NULL) {
+      if (temp_symbol->type != SYMBOL_LOCAL) PERROR("__core_exe_statement", "Symbol is not local.");
+
+      list_read_previous(temp_symbol->body.local->value.instances);
+
+      temp_symbol = list_read_next(exe.statement->temporaries);
     }
   }
 
@@ -1808,6 +1873,25 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
 e_statementend __core_debug(s_exe_scope exe) {
 	PANALYSIS("__core_debug");
   int a = 0;
+  return STATEMENT_END_CONTINUE;
+}
+
+e_statementend __core_if(s_exe_scope exe) {
+	PANALYSIS("__core_if");
+  if (exe.statement->type != STATEMENT_IF) PERROR("__core_while", "Wrong statement type");
+
+  s_statementbody_if *statement_body = exe.statement->body._if;
+
+  s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
+
+  if (check_result->data) {
+    e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_true));
+  } else {
+    if (statement_body->_false) {
+      e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_false));
+    }
+  }
+
   return STATEMENT_END_CONTINUE;
 }
 
@@ -1849,6 +1933,11 @@ void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance
   }
 }
 
+
+void __exe_initializeFieldInInstance(s_class_instance *instance, s_symbol *field_symbol) {
+  
+}
+
 s_class_instance *__core_exe_expression(s_exe_scope exe) {
 	PANALYSIS("__core_exe_expression");
   if (exe.statement->type != STATEMENT_EXPRESSION) PERROR("__core_exe_expression", "Wrong statement type");
@@ -1859,10 +1948,8 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
 
   u_int64_t pre_stack_ptr = stack.ptr;
 
-  s_list_item *op_item = LIST_READ_FIRST_FAST(operations);
-  while (op_item != NULL) {
-    s_expression_operation *op = op_item->value;
-
+  s_expression_operation *op = list_read_first(operations);
+  while (op != NULL) {
     if (op->type == OP_AccessSymbol) {
       s_class_instance *value = NULL;
       if (op->payload.symbol->type == SYMBOL_ARGUMENT) {
@@ -1870,6 +1957,8 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       } else if (op->payload.symbol->type == SYMBOL_FIELD) {
         s_class_instance *target = stack_pop__s_class_instance_ptr(&stack);
         value = target->data[op->payload.symbol->body.field->value.data_index];
+      } else if (op->payload.symbol->type == SYMBOL_LOCAL) {
+        value = (s_class_instance *)list_read_selected(op->payload.symbol->body.local->value.instances);
       } else {
         PERROR("__core_exe_expression", "Access symbol not allowed.");
       }
@@ -1918,7 +2007,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       PERROR("__core_exe_expression", "Operation not allowed.");
     }
 
-    op_item = LIST_READ_NEXT_FAST(operations);
+    op = list_read_next(operations);
   }
 
   if ((stack.ptr - pre_stack_ptr) > 1)
@@ -1928,28 +2017,6 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
     return stack_pop__s_class_instance_ptr(&stack);
   else
     return NULL;
-}
-
-s_class_instance *class_CreateInstance(s_symbol *class) {
-	PANALYSIS("class_CreateInstance");
-  if (class->type != SYMBOL_CLASS) PERROR("class_CreateInstance", "Wrong statement type");
-
-  s_class_instance *instance = NEW(s_class_instance);
-  instance->class = class;
-
-  // Allocate data space
-  instance->data = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
-
-  // Initialize fields
-  s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
-  while (field_symbol != NULL) {
-    s_class_instance *init_value = __core_exe_expression(EXE_SCOPE(NULL, instance, field_symbol->body.field->init_expression));
-    instance->data[field_symbol->body.field->value.data_index] = init_value;
-
-    field_symbol = list_read_next(instance->class->body.class->fields);
-  }
-
-  return instance;
 }
 
 /* ##### STDLIB 3rd avenue ##### */
