@@ -60,8 +60,8 @@ s2 : String = "world";
 cnt : Number = 0;
 
 Echo() {
-//  (this.s1 + " " + this.s2 + "!").Print();
-//  (this.t1 + this.t2).Show();
+  (this.s1 + " " + this.s2 + "!").Print();
+  (this.t1 + this.t2).Show();
   l : Number = 10;
 
   l = this.cnt;
@@ -82,11 +82,27 @@ Echo() {
 }
 
 Main() {
-  this.cnt = 0;
-  this.Echo();
-  this.cnt = 0;
-  this.Echo();
+  "Hello".Print();
+
+  c : Number = 0;
+  c = 0;
+
+  while (c < 80000) {
+    c = c + 1;
+    this.s2 = this.s2 + this.s1 + " " + c;
+  }
+
+  this.s2.Print();
 /*
+
+  (10 + 1).ToString().Print();
+  (this.s1 + " " + this.cnt).Print();
+  this.cnt = this.cnt + 2;
+  (this.s1 + " " + this.cnt).Print();
+  this.cnt = 0;
+  this.Echo();
+  this.cnt = 0;
+  this.Echo();
 
   //(1 + 2).Print();
   this.t1.Load(123);
@@ -103,9 +119,25 @@ Main() {
   this.s2.Show();
 
   l : Number = 10;
+  c : Number = 10;
+
+  l = 0;
+  c = 775;
+
+  while (l < 80) {
+    l = l + 1;
+    c = c + 1;
+    c = c + 1;
+    c = c + 1;
+    c = c + 1;
+    c = c + 1;
+    c = c + 1;
+    c = c + 1;
+    c = c + 1;
+  }
+
+  c.Print();
 */
-
-
   //this.s1.a.Print();
 /*
 

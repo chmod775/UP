@@ -1,8 +1,9 @@
 var i = 0;
-var a = 775;
-while (i < 8000000) {
+var d = "Hello"
+var a = ""
+while (i < 80000) {
 	i++;
-	a++;
+  a = a + d + " " + i
 }
 
 console.log(a);

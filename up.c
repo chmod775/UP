@@ -71,6 +71,9 @@ s_list *list_create() {
   return ret;
 }
 
+#define list_get_first(l) (l->head_item);
+#define list_get_next(li) (li->next);
+
 #define LIST_READ_FIRST_FAST(L) L->selected_item = L->head_item;
 #define LIST_READ_NEXT_FAST(L) L->selected_item = L->selected_item->next;
 
@@ -122,11 +125,7 @@ void *list_read_previous(s_list *l) {
   return l->selected_item->payload;
 }
 
-void *list_read_selected(s_list *l) {
-	PANALYSIS("list_read_selected");
-  if (l->selected_item == NULL) return NULL;
-  return l->selected_item->payload;
-}
+#define list_read_selected(l) (l->selected_item->payload);
 
 void list_push(s_list *l, void *value) {
 	PANALYSIS("list_push");
@@ -780,6 +779,7 @@ void compiler_Execute(s_compiler *compiler) {
   s_list *args = list_create();
   s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
 
+	PANALYSIS("compiler_Execute - RUN");
   __exe_method(programInstance, mainMethod, NULL, NULL);
 }
 
@@ -866,8 +866,12 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
   } else if (token.type == TOKEN_Literal_String) {
     s_class_instance *string = class_CreateInstance(LIB_StringClass);
-    string->data = malloc(sizeof(char) * strlen(token.content.string));
-    strcpy(string->data, token.content.string);
+
+    string->data = NEW(s_string);
+    s_string *str = (s_string *)string->data;
+
+    string_resize(str, strlen(token.content.string));
+    strcpy(str->content, token.content.string);
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = string;
@@ -1234,12 +1238,33 @@ s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
   s_method_def *found_overload = list_read_first(method->body.method->overloads);
   while (found_overload != NULL) {
     if (found_overload->arguments->items_count == args->items_count) { // TEMPORARY SEARCH FROM ARGUMENTS COUNT
-      break;
-    } 
+      bool argsMatching = true;
+
+      s_list_item *pos_MethodArg = list_get_first(found_overload->arguments);
+      s_list_item *pos_CallArg = list_get_first(args);
+      u_int64_t idx;
+      for (idx = 0; idx < args->items_count; idx++) {
+        s_symbol *methodArg_symbol = pos_MethodArg->payload;
+        pos_MethodArg = list_get_next(pos_MethodArg);
+        
+        s_expression_operation *callArg_expressionOperation = pos_CallArg->payload;
+        s_symbol *callArg_symbol = expression_GetClassOfOperation(callArg_expressionOperation);
+        pos_CallArg = list_get_next(pos_CallArg);
+
+        if (methodArg_symbol->body.argument->value.type != callArg_symbol) {
+          argsMatching = false;
+          break;
+        }
+      }
+
+      if (argsMatching)
+        break;
+    }
     found_overload = list_read_next(method->body.method->overloads);
   }
 
-  if (found_overload == NULL) PERROR("method_FindOverload", "Method overload not found.");
+  if (found_overload == NULL)
+    PERROR("method_FindOverload", "Method overload not found.");
 
   return found_overload;
 }
@@ -1841,15 +1866,18 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
     if (exe.statement->type == STATEMENT_BLOCK) {
       s_statementbody_block *statement_body = exe.statement->body.block;
 
-      s_list statements = *statement_body->statements; // Added list as local reference otherwise with a global selected_item we cannot execute different call stack statemtn pointers
+      //s_list statements = *statement_body->statements; // Added list as local reference otherwise with a global selected_item we cannot execute different call stack statemtn pointers
 
-      s_statement *sub_statement = list_read_first(&statements);
-      do {
-        ret = __core_exe_statement(SUB_EXE_SCOPE(exe, sub_statement));
+      s_list_item *pos = list_get_first(statement_body->statements);
+      u_int64_t idx;
+      for (idx = 0; idx < statement_body->statements->items_count; idx++) {
+        s_statement *sub_statement = pos->payload;
+        pos = list_get_next(pos);
+
+        __core_exe_statement(SUB_EXE_SCOPE(exe, sub_statement));
         if (ret != STATEMENT_END_CONTINUE)
           break;
-        sub_statement = list_read_next(&statements);
-      } while (sub_statement != NULL);
+      }
     } else {
       if (exe.statement->exe_cb)
         ret = exe.statement->exe_cb(exe);
@@ -1948,8 +1976,12 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
 
   u_int64_t pre_stack_ptr = stack.ptr;
 
-  s_expression_operation *op = list_read_first(operations);
-  while (op != NULL) {
+  s_list_item *pos = list_get_first(operations);
+  u_int64_t idx = 0;
+  for (idx = 0; idx < operations->items_count; idx++) {
+    s_expression_operation *op = pos->payload;
+    pos = list_get_next(pos);
+
     if (op->type == OP_AccessSymbol) {
       s_class_instance *value = NULL;
       if (op->payload.symbol->type == SYMBOL_ARGUMENT) {
@@ -2006,8 +2038,6 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
     } else {
       PERROR("__core_exe_expression", "Operation not allowed.");
     }
-
-    op = list_read_next(operations);
   }
 
   if ((stack.ptr - pre_stack_ptr) > 1)
@@ -2018,6 +2048,12 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
   else
     return NULL;
 }
+
+/* ##### SDK teardown ##### */
+s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *method) {
+
+}
+
 
 /* ##### STDLIB 3rd avenue ##### */
 void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
@@ -2057,40 +2093,96 @@ void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
   printf("%lu\n", self->data);
 }
 
+void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_ToString");
+
+  char tmp[32];
+  sprintf(tmp, "%ld", self->data);
+
+  u_int64_t len = strlen(tmp);
+  ret->data = malloc(sizeof(char) * len);
+  strcpy(ret->data, tmp);
+}
+
+void string_resize(s_string *str, u_int64_t len) {
+  u_int32_t old_blocks = (str->len / 2048) + 1;
+  u_int32_t new_blocks = (len / 2048) + 1;
+
+  str->len = len;
+
+  if ((old_blocks < new_blocks) || (str->content == NULL)) {
+    free(str->content);
+    str->content = (char *)malloc(new_blocks * 2048);
+  }
+}
 
 void string_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Constructor");
-  self->data = malloc(sizeof(char));
-  *self->data = 0x00;
+  self->data = NEW(s_string);
 }
 void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Constructor");
-  s_class_instance *arg_B = args[0];
 
-  self->data = malloc(sizeof(char) * strlen(arg_B->data));
-  strcpy(self->data, arg_B->data);
+  self->data = NEW(s_string);
+  s_string *str_self = (s_string *)self->data;
+  s_string *str_B = (s_string *)args[0]->data;
+
+  string_resize(str_self, str_B->len);
+  strcpy(str_self->content, str_B->content);
+}
+
+void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("string_Assign_String");
+  s_string *str_self = (s_string *)self->data;
+  s_string *str_B = (s_string *)args[0]->data;
+
+  string_resize(str_self, str_B->len);
+  strcpy(str_self->content, str_B->content);
 }
 
 void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Add_String");
-  s_class_instance *arg_B = args[0];
+  s_string *str_ret = (s_string *)ret->data;
+  s_string *str_self = (s_string *)self->data;
+  s_string *str_B = (s_string *)args[0]->data;
 
-  u_int64_t len = strlen(self->data) + strlen(arg_B->data);
+  u_int64_t len = str_self->len + str_B->len;
 
-  ret->data = malloc(sizeof(char) * len);
-  strcpy(ret->data, self->data);
-  strcat(ret->data, arg_B->data);
+  string_resize(str_ret, len);
+  strcpy(str_ret->content, str_self->content);
+  strcat(str_ret->content, str_B->content);
+}
+
+void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("string_Add_Number");
+
+  s_string *str_ret = (s_string *)ret->data;
+  s_string *str_self = (s_string *)self->data;
+
+  char tmp[32];
+  int ret_len = sprintf(tmp, "%ld", args[0]->data) + 1;
+
+  u_int64_t len = str_self->len + ret_len;
+
+  string_resize(str_ret, len);
+  strcpy(str_ret->content, str_self->content);
+  strcat(str_ret->content, tmp);
 }
 
 void string_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Print");
-  printf("%s\n", self->data);
+  s_string *str_self = (s_string *)self->data;
+  printf("%s\n", str_self->content);
 }
 
 void stdlib_Init(s_compiler *compiler) {
 	PANALYSIS("stdlib_Init");
-  /* ##### Number class ##### */
+
+  /* ##### Primary classes ##### */
   LIB_NumberClass = class_Create("Number", compiler->rootScope);
+  LIB_StringClass = class_Create("String", compiler->rootScope);
+
+  /* ##### Number class ##### */
   class_CreateConstructor(LIB_NumberClass, &number_Constructor, 0);
   class_CreateConstructor(LIB_NumberClass, &number_Constructor_Number, 1, "Number");
 
@@ -2098,13 +2190,15 @@ void stdlib_Init(s_compiler *compiler) {
   class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Print", &number_Print, NULL, 0);
+  class_CreateMethod(LIB_NumberClass, "ToString", &number_ToString, "String", 0);
 
   /* ##### String class ##### */
-  LIB_StringClass = class_Create("String", compiler->rootScope);
   class_CreateConstructor(LIB_StringClass, &string_Constructor, 0);
   class_CreateConstructor(LIB_StringClass, &string_Constructor_String, 1, "String");
 
+  class_CreateMethod(LIB_StringClass, "Assign", &string_Assign_String, "String", 1, "String");
   class_CreateMethod(LIB_StringClass, "Add", &string_Add_String, "String", 1, "String");
+  class_CreateMethod(LIB_StringClass, "Add", &string_Add_Number, "String", 1, "Number");
   class_CreateMethod(LIB_StringClass, "Print", &string_Print, NULL, 0);
 }
 

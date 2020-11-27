@@ -88,12 +88,10 @@ void stack_clear__##T(s_stack__##T *s) { \
   s->ptr = 0; \
 } \
 void stack_push__##T(s_stack__##T *s, T value) { \
-  s->content[s->ptr] = value; \
-  s->ptr++; \
+  s->content[s->ptr++] = value; \
 } \
 T stack_pop__##T(s_stack__##T *s) { \
-  s->ptr--; \
-  return s->content[s->ptr]; \
+  return s->content[--s->ptr]; \
 } \
 
 #define define_stack(T, N) \
@@ -116,12 +114,10 @@ void stack_clear__##N(s_stack__##N *s) { \
   s->ptr = 0; \
 } \
 void stack_push__##N(s_stack__##N *s, T value) { \
-  s->content[s->ptr] = value; \
-  s->ptr++; \
+  s->content[s->ptr++] = value; \
 } \
 T stack_pop__##N(s_stack__##N *s) { \
-  s->ptr--; \
-  return s->content[s->ptr]; \
+  return s->content[--s->ptr]; \
 } \
 
 typedef enum {
@@ -530,17 +526,17 @@ e_statementend __core_while(s_exe_scope exe);
 
 e_statementend __core_debug(s_exe_scope exe);
 
-// Symbols actions
-//void __core_symbol_assign(s_symbol *symbol, s_anyvalue value);
-//s_anyvalue __core_symbol_get_value(s_symbol *symbol);
-
-void __core_symbol_call(s_symbol *symbol, s_list *arguments);
+// SDK
+s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *method);
 
 
 
-// Class actions
-s_symbol *__core_class_get_method(s_symbol *class, char *methodName);
-s_symbol *__core_class_get_field(s_symbol *class, char *fieldName);
+typedef struct {
+  u_int32_t len;
+  char *content;
+} s_string;
+
+void string_resize(s_string *str, u_int64_t size);
 
 // Required lib classes
 s_symbol *LIB_NumberClass = NULL;

@@ -1,6 +1,7 @@
 c = 0
-a = 775
-while (c < 8000000):
+d = "Hello"
+a = ""
+while (c < 80000):
   c = c + 1;
-  a = a + 1;
+  a = a + d + " " + str(c)
 print(a)
