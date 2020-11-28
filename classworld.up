@@ -1,4 +1,14 @@
 
+Number {
+  Inc(step : Number) {
+    this = this + step;
+  }
+
+  Print() {
+    this.ToString().Print();
+  }
+}
+
 Boia {
   a : Number = Number(10);
 
@@ -38,10 +48,8 @@ Car {
 }
 
 String {
-  a : Number = 775;
-
-  Show() {
-    //this.a.Print();
+  Add(src : Number) : String {
+    return = this + src.ToString();
   }
 }
 
@@ -81,20 +89,39 @@ Echo() {
   l.Print();
 }
 
+Loop() {
+  if (this.cnt < 100) {
+    this.cnt = this.cnt + 1;
+    this.Loop();
+  }
+}
+
 Main() {
   "Hello".Print();
 
   c : Number = 0;
-  c = 0;
+  c = 10;
+  c.Inc(10);
+  c.Inc(10);
+  c.Inc(10);
+  c.Inc(10);
+  c.Inc(10);
+  c.Print();
+
+
+  //ptr : Boia -> NULL;
 
   while (c < 80000) {
-    c = c + 1;
+    c.Inc(1);
+    this.cnt = Number(0);
+    this.Loop();
     this.s2 = this.s2 + this.s1 + " " + c;
   }
 
   this.s2.Print();
-/*
 
+
+/*
   (10 + 1).ToString().Print();
   (this.s1 + " " + this.cnt).Print();
   this.cnt = this.cnt + 2;

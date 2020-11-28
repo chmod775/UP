@@ -1,18 +1,26 @@
 v0.2
-  - Put casting and type conversion on compiler side. (not on __core execution)
+  REMOVED - Put casting and type conversion on compiler side. (not on __core execution)
 
 v0.3
   - String class
   - Integrate real with Number class
-  - Regex (using class ?)
-  - JSON (using class ?)
   - List and Dictionary classes
   - FOR statement
   - SWITCH statement
-  - '->' and '<-' link operation (like pointers. Copy address and point to class instance)
-  [BUG]- (this + "a").Print(); 
+  - '->' and '<-' link operation (like pointers. Copy address and point to class instance. Useful for garbage collection)
+  OK - [BUG]- (this + "a").Print(); 
   [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
+  - Method arguments must be sa local field with initialized value from call argument
+  [BUG]- Local field initialization not working
+  - Garbage collection and reusable class instances in class_CreateInstance
+    + Use a list in the global class with all the created instances. If list is not empty pull from that, otherwise create new instance
+    + Always call constructor and fields initialization
 
+v0.4
+  - Full class inheritance
+  - Method / Field override behaviour
+  - Regex (using class ?)
+  - JSON (using class ?)
 
 v?
   - JSON export / import for every object

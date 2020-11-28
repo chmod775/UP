@@ -808,8 +808,10 @@ s_expression_operation *expression_Emit(s_list *core_operations, e_expression_op
 s_symbol *expression_GetClassOfOperation(s_expression_operation *operation) {
   s_symbol *ret = NULL;
 
-  if ((operation->type == OP_AccessSymbol) || (operation->type == OP_LoadThis)) {
+  if (operation->type == OP_AccessSymbol) {
     ret = operation->payload.symbol->body.field->value.type;
+  } else if ((operation->type == OP_LoadThis) || (operation->type == OP_LoadReturn)) {
+    ret = operation->payload.symbol;
   } else if (operation->type == OP_UseTemporaryInstance) {
     ret = operation->payload.temporary->class;
   } else if ((operation->type == OP_MethodCall) || (operation->type == OP_ConstructorCall)) {
@@ -1865,9 +1867,7 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
   if (exe.statement != NULL) {
     if (exe.statement->type == STATEMENT_BLOCK) {
       s_statementbody_block *statement_body = exe.statement->body.block;
-
-      //s_list statements = *statement_body->statements; // Added list as local reference otherwise with a global selected_item we cannot execute different call stack statemtn pointers
-
+      
       s_list_item *pos = list_get_first(statement_body->statements);
       u_int64_t idx;
       for (idx = 0; idx < statement_body->statements->items_count; idx++) {
@@ -2096,12 +2096,9 @@ void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
 void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_ToString");
 
-  char tmp[32];
-  sprintf(tmp, "%ld", self->data);
-
-  u_int64_t len = strlen(tmp);
-  ret->data = malloc(sizeof(char) * len);
-  strcpy(ret->data, tmp);
+  s_string *str_ret = (s_string *)ret->data;
+  string_resize(str_ret, 20);
+  sprintf(str_ret->content, "%ld", self->data);
 }
 
 void string_resize(s_string *str, u_int64_t len) {
@@ -2189,7 +2186,7 @@ void stdlib_Init(s_compiler *compiler) {
   class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
-  class_CreateMethod(LIB_NumberClass, "Print", &number_Print, NULL, 0);
+  //class_CreateMethod(LIB_NumberClass, "Print", &number_Print, NULL, 0);
   class_CreateMethod(LIB_NumberClass, "ToString", &number_ToString, "String", 0);
 
   /* ##### String class ##### */
@@ -2198,7 +2195,7 @@ void stdlib_Init(s_compiler *compiler) {
 
   class_CreateMethod(LIB_StringClass, "Assign", &string_Assign_String, "String", 1, "String");
   class_CreateMethod(LIB_StringClass, "Add", &string_Add_String, "String", 1, "String");
-  class_CreateMethod(LIB_StringClass, "Add", &string_Add_Number, "String", 1, "Number");
+  //class_CreateMethod(LIB_StringClass, "Add", &string_Add_Number, "String", 1, "Number");
   class_CreateMethod(LIB_StringClass, "Print", &string_Print, NULL, 0);
 }
 

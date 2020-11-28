@@ -10,10 +10,6 @@ b : Number = a;           // Like "a : Number = 6;"
 
 c : Number = NULL;
 
-c = a;                    // Cloning. Like example "a = Number(5);"
-
-c = a.Clone();            // CLONING. Done in class definition using overwritable method (super method just copy memory using memcpy)
-
 // Constructor and Destroyer
 TestClass {
   content : Number = 0;
@@ -81,16 +77,16 @@ t1 : Brother = NULL;
 
 // Extension
 Number {
-  Add(a:Number, b:Number) {}
+  Add(b:Number) {}
 }
 
 Matrix {
-  Add(a:Matrix, b:Number) {}
-  Add(a:Matrix, b:Matrix) {}
+  Add(b:Number) {}
+  Add(b:Matrix) {}
 }
 
 Number {
-  Add(a:Number, b:Matrix) {}
+  Add(b:Matrix) {}
 }
 
 
