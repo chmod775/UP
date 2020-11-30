@@ -23,7 +23,7 @@ function test(cnt) {
 
 
 var i = new num();
-var t = 0;
+var t = 3.1415;
 var a = "world";
 var d = "Hello";
 

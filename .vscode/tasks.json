@@ -8,6 +8,7 @@
       "args": [
         "${file}",
         "-O3",
+        "-s",
         "-g",
         "-o",
         "${fileDirname}/${fileBasenameNoExtension}.exe"

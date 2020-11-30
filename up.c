@@ -413,7 +413,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
 
   int64_t token_val_int;
   double token_val_decimal;
-  char *token_val_string = (char *)malloc(sizeof(char) * 128);
+  char *token_val_string = NULL;
 
   while (token = *src) {
     ++src;
@@ -462,11 +462,19 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token >= '0' && token <= '9') {
       // parse number, three kinds: dec(123) hex(0x123) oct(017)
+      last_pos = src - 1;
       token_val_int = token - '0';
       if (token_val_int > 0) {
         // dec, starts with [1-9]
-        while (*src >= '0' && *src <= '9') {
+        while ((*src >= '0' && *src <= '9') || (*src == '.')) {
+          if (*src == '.')
+            break;
           token_val_int = token_val_int*10 + *src++ - '0';
+        }
+        if (*src == '.') { // Float type contains a point
+          src = last_pos;
+          token_val_decimal = strtod(src, &src);
+          ret(TOKEN_Literal_Real, token_val_decimal, decimal);
         }
       } else {
         // starts with 0
@@ -489,6 +497,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       ret(TOKEN_Literal_Int, token_val_int, integer);
     }
     else if (token == '"' || token == '\'') {
+      token_val_string = (char *)malloc(sizeof(char) * 128);
       char *token_val_string_ptr = token_val_string;
       while (*src != 0 && *src != token) {
         char ch = *src++;
@@ -548,6 +557,9 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       if (*src == '-') {
         src ++;
         ret(TOKEN_Dec, NULL, any);
+      } else if (*src == '>') {
+        src ++;
+        ret(TOKEN_Link, NULL, any);
       } else {
         ret(TOKEN_Sub, NULL, any);
       }
@@ -569,6 +581,9 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       } else if (*src == '<') {
         src ++;
         ret(TOKEN_Shl, NULL, any);
+      } else if (*src == '-') {
+        src ++;
+        ret(TOKEN_Link, NULL, any);
       } else {
         ret(TOKEN_Lt, NULL, any);
       }
@@ -854,8 +869,12 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   // Unary operators
   if (token.type == TOKEN_Literal_Int) {
     s_class_instance *number = class_CreateInstance(LIB_NumberClass);
-    number->data = malloc(sizeof(u_int64_t));
-    number->data = token.content.integer;
+
+    s_number *new = NEW(s_number);
+    new->isDecimal = false;
+    new->content.integer = token.content.integer;
+
+    number->data = new;
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = number;
@@ -863,7 +882,16 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     match(scope, TOKEN_Literal_Int);
 
   } else if (token.type == TOKEN_Literal_Real) {
-    // TODO
+    s_class_instance *number = class_CreateInstance(LIB_NumberClass);
+
+    s_number *new = NEW(s_number);
+    new->isDecimal = true;
+    new->content.decimal = token.content.decimal;
+
+    number->data = new;
+
+    op = expression_Emit(operations, OP_UseTemporaryInstance);
+    op->payload.temporary = number;
     match(scope, TOKEN_Literal_Real);
 
   } else if (token.type == TOKEN_Literal_String) {
@@ -971,38 +999,16 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
   // binary operator and postfix operators.
   while (token.type >= level) {
-    if (token.type == TOKEN_Assign) {
-      match(scope, TOKEN_Assign);
+    if ((token.type >= TOKEN_Assign) && (token.type <= TOKEN_Dec)) {
+      s_token_operator token_operator = token_operators[token.type - TOKEN_Assign];
+      match(scope, token.type);
 
-      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Assign);
-
-      s_list *args = list_create();
-      list_push(args, op_arg);
-
-      s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, "Assign", args);
-      op = expression_MethodCall(operations, found_methodOverload);
-    } else if (token.type == TOKEN_Add) {
-      match(scope, TOKEN_Add);
-
-      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Mul);
+      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, token_operator.sub_token);
 
       s_list *args = list_create();
       list_push(args, op_arg);
 
-      s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, "Add", args);
-      op = expression_MethodCall(operations, found_methodOverload);
-    } else if (token.type == TOKEN_Inc) {
-      match(scope, TOKEN_Inc);
-      
-    } else if (token.type == TOKEN_Lt) {
-      match(scope, TOKEN_Lt);
-
-      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Shl);
-
-      s_list *args = list_create();
-      list_push(args, op_arg);
-
-      s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, "Less", args);
+      s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
       op = expression_MethodCall(operations, found_methodOverload);
     } else if (token.type == TOKEN_Dot) {
       // Descend parent hierarchy
@@ -1931,7 +1937,9 @@ e_statementend __core_while(s_exe_scope exe) {
 
   s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
 
-  while (check_result->data) {
+  s_number *num_result = (s_number *)check_result->data;
+
+  while (num_result->content.integer) {
     e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
     if (ret != STATEMENT_END_CONTINUE)
       break;
@@ -2058,47 +2066,107 @@ s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *met
 /* ##### STDLIB 3rd avenue ##### */
 void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
-  self->data = malloc(sizeof(u_int64_t));
-  *self->data = 0;
+  self->data = NEW(s_number);
 }
 void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
-  self->data = malloc(sizeof(u_int64_t));
-  s_class_instance *arg_B = args[0];
-  self->data = arg_B->data;
+  s_number *num_B = (s_number *)args[0]->data;
+
+  s_number *new = NEW(s_number);
+  new->isDecimal = num_B->isDecimal;
+  new->content = num_B->content;
+
+  self->data = new;
 }
 
 void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Add_Number");
-  s_class_instance *arg_B = args[0];
 
-  ret->data = (u_int64_t)self->data + (u_int64_t)arg_B->data;
+  s_number *num_B = (s_number *)args[0]->data;
+  s_number *num_self = (s_number *)self->data;
+  s_number *num_ret = (s_number *)ret->data;
+
+  bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
+  bool allDecimal = num_self->isDecimal && num_B->isDecimal;
+
+  num_ret->isDecimal = anyDecimal;
+
+  if (!num_ret->isDecimal) {
+    num_ret->content.integer = num_self->content.integer + num_B->content.integer;
+  } else if (allDecimal) {
+    num_ret->content.decimal = num_self->content.decimal + num_B->content.decimal;
+  } else {
+    double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
+    double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
+    num_ret->content.decimal = dec_self + dec_B;
+  }
+}
+
+void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Sub_Number");
+  s_number *num_B = (s_number *)args[0]->data;
+  s_number *num_self = (s_number *)self->data;
+  s_number *num_ret = (s_number *)ret->data;
+
+}
+
+void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("number_Mul_Number");
+  s_number *num_B = (s_number *)args[0]->data;
+  s_number *num_self = (s_number *)self->data;
+  s_number *num_ret = (s_number *)ret->data;
+
 }
 
 void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Less_Number");
-  s_class_instance *arg_B = args[0];
+  s_number *num_B = (s_number *)args[0]->data;
+  s_number *num_self = (s_number *)self->data;
+  s_number *num_ret = (s_number *)ret->data;
 
-  ret->data = (u_int64_t)self->data < (u_int64_t)arg_B->data;
+  bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
+
+  num_ret->isDecimal = false;
+
+  if (!anyDecimal) {
+    num_ret->content.integer = num_self->content.integer < num_B->content.integer;
+  } else {
+    double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
+    double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
+    num_ret->content.decimal = dec_self < dec_B;
+  }
 }
 
 void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Assign_Number");
-  s_class_instance *arg_B = args[0];
-  self->data = arg_B->data;
+  s_number *num_B = (s_number *)args[0]->data;
+  s_number *num_self = (s_number *)self->data;
+  s_number *num_ret = (s_number *)ret->data;
+
+  num_self->isDecimal = num_B->isDecimal;
+  num_self->content = num_B->content;
 }
 
 void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Print");
-  printf("%lu\n", self->data);
+  s_number *num_self = (s_number *)self->data;
+  if (num_self->isDecimal)
+    printf("%lf\n", num_self->content.decimal);
+  else
+    printf("%lu\n", num_self->content.integer);
 }
 
 void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_ToString");
+  s_number *num_self = (s_number *)self->data;
 
   s_string *str_ret = (s_string *)ret->data;
   string_resize(str_ret, 20);
-  sprintf(str_ret->content, "%ld", self->data);
+
+  if (num_self->isDecimal)
+    sprintf(str_ret->content, "%lf", num_self->content.decimal);
+  else
+    sprintf(str_ret->content, "%ld", num_self->content.integer);
 }
 
 void string_resize(s_string *str, u_int64_t len) {
@@ -2184,6 +2252,7 @@ void stdlib_Init(s_compiler *compiler) {
   class_CreateConstructor(LIB_NumberClass, &number_Constructor_Number, 1, "Number");
 
   class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Sub", &number_Sub_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
   //class_CreateMethod(LIB_NumberClass, "Print", &number_Print, NULL, 0);

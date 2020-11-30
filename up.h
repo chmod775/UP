@@ -130,8 +130,39 @@ typedef enum {
   TOKEN_This, TOKEN_Return,
 
   TOKEN_If, TOKEN_Else, TOKEN_While, TOKEN_For, TOKEN_Switch,
+  TOKEN_Link,
   TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak, TOKEN_Dot
 } e_token;
+
+typedef struct {
+  char *method_name;
+  e_token sub_token;
+} s_token_operator;
+
+s_token_operator token_operators[] = {
+  { .method_name = "Assign", .sub_token = TOKEN_Assign },
+  { .method_name = "Cond", .sub_token = TOKEN_Cond },
+  { .method_name = "Lor", .sub_token = TOKEN_Lan },
+  { .method_name = "Lan", .sub_token = TOKEN_Or },
+  { .method_name = "Or", .sub_token = TOKEN_Xor },
+  { .method_name = "Xor", .sub_token = TOKEN_And },
+  { .method_name = "And", .sub_token = TOKEN_Eq },
+  { .method_name = "Eq", .sub_token = TOKEN_Ne },
+  { .method_name = "Ne", .sub_token = TOKEN_Lt },
+  { .method_name = "Less", .sub_token = TOKEN_Shl },
+  { .method_name = "Gt", .sub_token = TOKEN_Shl },
+  { .method_name = "Le", .sub_token = TOKEN_Shl },
+  { .method_name = "Ge", .sub_token = TOKEN_Shl },
+  { .method_name = "Shl", .sub_token = TOKEN_Add },
+  { .method_name = "Shr", .sub_token = TOKEN_Add },
+  { .method_name = "Add", .sub_token = TOKEN_Mul },
+  { .method_name = "Sub", .sub_token = TOKEN_Mul },
+  { .method_name = "Mul", .sub_token = TOKEN_Inc },
+  { .method_name = "Div", .sub_token = TOKEN_Inc },
+  { .method_name = "Mod", .sub_token = TOKEN_Inc },
+  { .method_name = "Inc", .sub_token = TOKEN_Inc },
+  { .method_name = "Dec", .sub_token = TOKEN_Dec }
+};
 
 /* ##### Types ##### */
 typedef struct _s_statement s_statement;
@@ -529,7 +560,13 @@ e_statementend __core_debug(s_exe_scope exe);
 // SDK
 s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *method);
 
-
+typedef struct {
+  bool isDecimal;
+  union {
+    u_int64_t integer;
+    double decimal;
+  } content;
+} s_number;
 
 typedef struct {
   u_int32_t len;

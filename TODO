@@ -2,8 +2,8 @@ v0.2
   REMOVED - Put casting and type conversion on compiler side. (not on __core execution)
 
 v0.3
-  - String class
-  - Integrate real with Number class
+  + String class
+  + Integrate real with Number class
   - List and Dictionary classes
   - FOR statement
   - SWITCH statement
@@ -26,3 +26,8 @@ v?
   - JSON export / import for every object
   - Dump / Load all memory to a JSON (like saving a snapshot for old NES games)
   - GIT like included features for "seamless" switch to changes in software (using above feature JSON dump/load)
+  - Try / Catch
+  - Method failover (default return with generic exception)
+  - Async methods
+  - Reflections
+  - Generics in classes (like C#)

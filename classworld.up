@@ -96,25 +96,26 @@ Loop() {
   }
 }
 
+Point3D {
+  x : Number = 0;
+  y : Number = 0;
+  z : Number = 0;
+}
+
 Main() {
   "Hello".Print();
 
   c : Number = 0;
-  c = 10;
-  c.Inc(10);
-  c.Inc(10);
-  c.Inc(10);
-  c.Inc(10);
-  c.Inc(10);
-  c.Print();
+  c = 3.1415;
+  c = 20;
+
+  //c.Print();
 
 
   //ptr : Boia -> NULL;
 
   while (c < 80000) {
     c.Inc(1);
-    this.cnt = Number(0);
-    this.Loop();
     this.s2 = this.s2 + this.s1 + " " + c;
   }
 
