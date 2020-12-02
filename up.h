@@ -127,7 +127,7 @@ typedef enum {
 
   TOKEN_CommentBlock_End,
 
-  TOKEN_This, TOKEN_Return,
+  TOKEN_This, TOKEN_Return, TOKEN_Super, TOKEN_Root,
 
   TOKEN_If, TOKEN_Else, TOKEN_While, TOKEN_For, TOKEN_Switch,
   TOKEN_Link,
@@ -556,6 +556,11 @@ e_statementend __core_for(s_exe_scope exe);
 e_statementend __core_while(s_exe_scope exe);
 
 e_statementend __core_debug(s_exe_scope exe);
+
+/* ##### Generic object LIB ##### */
+void object_Assign(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
+void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
+void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
 
 // SDK
 s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *method);

@@ -96,25 +96,53 @@ Loop() {
   }
 }
 
-Point3D {
-  x : Number = 0;
-  y : Number = 0;
-  z : Number = 0;
+Point2D {
+  x : Number = 111;
+  y : Number = 222;
+
+  () {}
+
+  Sum() {
+    (this.x + this.y).Print();
+  }
 }
+
+Point3D : Point2D {
+  z : Number = 444;
+  () {}
+
+  SumSum() {
+    this.Sum();
+  }
+}
+
+p1 : Point2D = Point2D();
+p2 : Point2D = Point2D();
+p3 : Point3D = Point3D();
 
 Main() {
   "Hello".Print();
 
   c : Number = 0;
   c = 3.1415;
-  c = 20;
 
   //c.Print();
 
+  //this.p1 = this.p2;
+
+  this.p2.x.Print();
+  this.p2.y.Print();
+
+  this.p2.Sum();
+
+  this.p3.x.Print();
+  this.p3.y.Print();
+  this.p3.z.Print();
+  this.p3.SumSum();
 
   //ptr : Boia -> NULL;
 
-  while (c < 80000) {
+  while (c < 10) {
     c.Inc(1);
     this.s2 = this.s2 + this.s1 + " " + c;
   }

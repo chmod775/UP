@@ -74,6 +74,26 @@ s_list *list_create() {
 #define list_get_first(l) (l->head_item);
 #define list_get_next(li) (li->next);
 
+void list_remove_item(s_list *l, s_list_item *item) {
+  l->items_count--;
+
+  s_list_item *head = l->head_item;
+
+  if (item == head) {
+    if (head == head->next) {
+      l->head_item = NULL;
+    } else {
+      l->head_item = item->next;
+      head->prev->next = l->head_item;
+    }
+  } else {
+    item->next->prev = item->prev;
+    item->prev->next = item->next;
+    item->next = NULL;
+    item->prev = NULL;
+  }
+}
+
 #define LIST_READ_FIRST_FAST(L) L->selected_item = L->head_item;
 #define LIST_READ_NEXT_FAST(L) L->selected_item = L->selected_item->next;
 
@@ -364,6 +384,7 @@ s_scope *scope_CreateAsRoot() {
 
   scope_AddSymbol(ret, symbol_CreateFromKeyword("this", TOKEN_This));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("return", TOKEN_Return));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("super", TOKEN_Super));
 
   scope_AddSymbol(ret, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
 
@@ -1280,12 +1301,11 @@ s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
 s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args) {
 	PANALYSIS("class_FindMethodByName");
   if (class == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
-  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol is not a class.");
+  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol \"%s\" is not a class.", name);
   if (name == NULL) PERROR("class_FindMethodByName", "Name cannot be null.");
 
   s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
-  if (found_symbol == NULL)
-    PERROR("class_FindMethodByName", "Symbol does not exists.");
+  if (found_symbol == NULL) PERROR("class_FindMethodByName", "Symbol \"%s\" does not exists.", name);
   
   return method_FindOverload(found_symbol, args);
 }
@@ -1330,11 +1350,6 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
 
   match(parent->scope, TOKEN_Symbol);
 
-  if (token.type == ':') { // Derivation (multiple classes allowed)
-    // MixClass : ClassA, ClassB, ClassC, ... {}
-    match(parent->scope, ':');
-  }
-
   if (token.type == TOKEN_Dot) { // External Inheritance
     // ClassA.ClassB...ClassC.Children {}
     match(parent->scope, TOKEN_Dot);
@@ -1360,6 +1375,52 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
 
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_symbol;
+
+  if (token.type == ':') { // Derivation (multiple classes allowed)
+    // MixClass : ClassA, ClassB, ClassC, ... {}
+    match(parent->scope, ':');
+
+    while (token.type != '{') {
+      s_symbol *ex_class = token.content.symbol;
+      if (ex_class->type != SYMBOL_CLASS) CERROR(compiler, "compile_ClassDefinition", "Derivation symbol is not a class.");
+
+      s_list *l = NULL;
+      s_list_item *l_item = NULL;
+      u_int64_t idx;
+
+      // Create sub scope
+      ret->scope = scope_Create(ex_class->body.class->scope);
+      class_symbol->body.class->scope = ret->scope;
+
+      // Copy fields
+      l = ex_class->body.class->fields;
+      l_item = list_get_first(l);
+      for (idx = 0; idx < l->items_count; idx++) {
+        list_push(class_symbol->body.class->fields, l_item->payload);
+        l_item = list_get_next(l_item);
+      }
+
+      // Copy methods
+      l = ex_class->body.class->methods;
+      l_item = list_get_first(l);
+      for (idx = 0; idx < l->items_count; idx++) {
+        list_push(class_symbol->body.class->methods, l_item->payload);
+        l_item = list_get_next(l_item);
+      }
+
+      // Copy constructors
+      l = ex_class->body.class->constructors;
+      l_item = list_get_first(l);
+      for (idx = 0; idx < l->items_count; idx++) {
+        list_push(class_symbol->body.class->constructors, l_item->payload);
+        l_item = list_get_next(l_item);
+      }
+
+      match(parent->scope, TOKEN_Symbol);
+      if (token.type == ',')
+        match(parent->scope, ',');
+    }
+  }
 
   match(ret->scope, '{');
 
@@ -1411,13 +1472,22 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
   newMethod->hash = hash;
 
   // Check already defined Method overload
-  s_method_def *m = list_read_first(parent->body.class_def->symbol->body.class->constructors);
-  while (m != NULL) {
+  s_list *l = parent->body.class_def->symbol->body.class->constructors;
+  s_list_item *li = list_get_first(l);
+  u_int64_t idx;
+  for (idx = 0; idx < l->items_count; idx++) {
+    s_method_def *m = li->payload;
+
     if (hash == m->hash) {
       // ### TODO: Deep check for memory content, not only hash
-      CERROR(compiler, "compile_MethodDefinition", "Constructor overload already defined.");
+      // CERROR(compiler, "compile_MethodDefinition", "Constructor overload already defined.");
+
+      // Removed old overload and exit
+      list_remove_item(l, li);
+      break;
     }
-    m = list_read_next(parent->body.class_def->symbol->body.class->constructors);
+
+    li = list_get_next(li);
   }
 
   // Get body statement for method
@@ -2062,6 +2132,19 @@ s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *met
 
 }
 
+/* ##### Generic object LIB ##### */
+void object_Assign(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("object_Assign");
+
+}
+
+void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("object_Print");
+}
+
+void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+	PANALYSIS("object_ToString");
+}
 
 /* ##### STDLIB 3rd avenue ##### */
 void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
