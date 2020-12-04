@@ -556,10 +556,13 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       }
     }
     else if (token == '=') {
-      // parse '==' and '='
+      // parse '==', '=' or '=>'
       if (*src == '=') {
         src ++;
         ret(TOKEN_Eq, NULL, any);
+      } else if (*src == '>') {
+        src ++;
+        ret(TOKEN_Link, NULL, any);
       } else {
         ret(TOKEN_Assign, NULL, any);
       }
@@ -578,9 +581,6 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       if (*src == '-') {
         src ++;
         ret(TOKEN_Dec, NULL, any);
-      } else if (*src == '>') {
-        src ++;
-        ret(TOKEN_Link, NULL, any);
       } else {
         ret(TOKEN_Sub, NULL, any);
       }
@@ -602,9 +602,6 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       } else if (*src == '<') {
         src ++;
         ret(TOKEN_Shl, NULL, any);
-      } else if (*src == '-') {
-        src ++;
-        ret(TOKEN_Link, NULL, any);
       } else {
         ret(TOKEN_Lt, NULL, any);
       }
@@ -658,7 +655,15 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '.') {
       ret(TOKEN_Dot, NULL, any);
-    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',' || token == ':') {
+    }
+    else if (token == ':') {
+      if (*src == ':') {
+        src ++;
+        ret(TOKEN_DirectChildren, NULL, any);
+      } else {
+        ret(token, NULL, any);
+      }
+    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',') {
       // directly return the character as token;
       ret(token, NULL, any);
     }
@@ -960,7 +965,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     op->payload.symbol = parent_statement->body.class_def->symbol;
 
     match(scope, TOKEN_This);
+  } else if (token.type == TOKEN_Super) {
 
+    match(scope, TOKEN_Super);
   } else if (token.type == TOKEN_Symbol) {
     s_symbol *symbol = token.content.symbol;
     if (symbol->type == SYMBOL_NOTDEFINED)
@@ -1031,6 +1038,11 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
       s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
       op = expression_MethodCall(operations, found_methodOverload);
+    } else if (token.type == TOKEN_Link) {
+      match(scope, TOKEN_Link);
+      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
+
+      op = expression_Emit(operations, OP_Link);
     } else if (token.type == TOKEN_Dot) {
       // Descend parent hierarchy
       s_scope *parent_scope = scope;
@@ -2080,6 +2092,13 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       stack_push__s_class_instance_ptr(&stack, exe.ret);
     } else if (op->type == OP_LoadThis) {
       stack_push__s_class_instance_ptr(&stack, exe.self);
+    } else if (op->type == OP_Link) {
+      s_class_instance *src = stack_pop__s_class_instance_ptr(&stack);
+      s_class_instance *target = stack_pop__s_class_instance_ptr(&stack);
+
+      if (src->class != target->class) PERROR("__core_exe_expression", "Cast not allowed for link.");
+
+      target->data = src->data;
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       // Pop return instance from stack (or create new one in case of constructor)
       s_class_instance *ret = NULL;

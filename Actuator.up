@@ -1,0 +1,61 @@
+Actuator {
+  id : Number = 0;
+  name : String = "";
+
+  EV :: {
+    monostable : Boolean = false;
+
+  }
+
+  Motor :: {
+    maxRPM : Number = 1500;
+
+    Status {
+      isPowered : Boolean;
+      isEnabled : Boolean;
+      isMoving : Boolean;
+    }
+    
+    status : Status = Status();
+
+    Axis :: {
+      actualPosition : Number = 0;
+      actualSpeed : Number = 0;
+    }
+
+    Fan :: {
+      isRunning : Boolean = 0;
+    }
+  }
+}
+
+actuators : [Actuator] = [];
+
+actuators.Push(Actuator.Motor.Fan());
+actuators.Push(Actuator.EV());
+actuators.Push(Actuator.EV());
+actuators.Push(Actuator.EV());
+actuators.Push(Actuator.EV());
+actuators.Push(Actuator.Motor.Axis());
+actuators.Push(Actuator.Motor.Axis());
+actuators.Push(Actuator.Motor.Axis());
+
+
+ProgramChildren :: {
+  
+}
+
+// EQUALS TO
+
+ProgramChildren : Program {
+  
+}
+
+
+a1 : Actuator = Actuator();
+e1 : Actuator.EV = Actuator.EV();
+
+a1 = e1; // WRONG! It just assign e1's "id" and "name" to a1
+
+a2 : Actuator -> NULL;
+a2 -> e1;

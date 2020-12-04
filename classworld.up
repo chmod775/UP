@@ -1,49 +1,6 @@
-
 Number {
-  Inc(step : Number) {
-    this = this + step;
-  }
-
   Print() {
     this.ToString().Print();
-  }
-}
-
-Boia {
-  a : Number = Number(10);
-
-  () {}
-
-  (val : Number) {
-    this.a = val;
-  }
-
-  Show() {
-    this.a.Print();
-  }
-
-  Assign(src : Boia) : Boia {
-    this.a = src.a;
-    return.a = this.a;
-  }
-
-  Add(src : Boia) : Boia {
-    return.a = this.a + src.a;
-  }
-
-  Load(val : Number) {
-    this.a = val;
-  }
-}
-
-Car {
-  motor : Boia = Boia(1);
-
-  () {
-  }
-
-  GetMotor() : Boia {
-    //return this.motor;
   }
 }
 
@@ -53,179 +10,45 @@ String {
   }
 }
 
-t1 : Boia = Boia();
-t2 : Boia = Boia();
-t3 : Boia = Boia();
+Test {
+  a : Number = Number(775);
 
-c1 : Car = Car();
-c2 : Car = Car();
+  Children {
+    b : Number = 789;
 
-s1 : String = "Hello";
-s2 : String = "world";
-
-//r1 : Number = 3.1415;
-
-cnt : Number = 0;
-
-Echo() {
-  (this.s1 + " " + this.s2 + "!").Print();
-  (this.t1 + this.t2).Show();
-  l : Number = 10;
-
-  l = this.cnt;
-
-  this.cnt = this.cnt + 1;
-
-  if (this.cnt < 10)
-    this.Echo();
-
-  t : Number = 0;
-  t = 0;
-  while (t < 1000) {
-    i : Number = 0;
-    t = t + 1;
+    () {}
   }
-
-  l.Print();
-}
-
-Loop() {
-  if (this.cnt < 100) {
-    this.cnt = this.cnt + 1;
-    this.Loop();
-  }
-}
-
-Point2D {
-  x : Number = 111;
-  y : Number = 222;
 
   () {}
 
-  Sum() {
-    (this.x + this.y).Print();
+  Show() {
+    this.a.Print();
+  }
+
+  ToString() : String {
+    return = this.a.ToString();
+  }
+
+  Assign(src : Test) {
+    this.a = src.a;
   }
 }
 
-Point3D : Point2D {
-  z : Number = 444;
-  () {}
 
-  SumSum() {
-    this.Sum();
-  }
-}
+t1 : Test = Test();
 
-p1 : Point2D = Point2D();
-p2 : Point2D = Point2D();
-p3 : Point3D = Point3D();
+ttt : Test = Test();
 
 Main() {
-  "Hello".Print();
+  this.t1.a = 555;
+  this.ttt => this.t1;
 
-  c : Number = 0;
-  c = 3.1415;
+  ("t1: " + this.t1.ToString()).Print();
+  ("ttt: " + this.ttt.ToString()).Print();
 
-  //c.Print();
+  //this.t1.a = 123;
+  this.ttt.a = 345;
 
-  //this.p1 = this.p2;
-
-  this.p2.x.Print();
-  this.p2.y.Print();
-
-  this.p2.Sum();
-
-  this.p3.x.Print();
-  this.p3.y.Print();
-  this.p3.z.Print();
-  this.p3.SumSum();
-
-  //ptr : Boia -> NULL;
-
-  while (c < 10) {
-    c.Inc(1);
-    this.s2 = this.s2 + this.s1 + " " + c;
-  }
-
-  this.s2.Print();
-
-
-/*
-  (10 + 1).ToString().Print();
-  (this.s1 + " " + this.cnt).Print();
-  this.cnt = this.cnt + 2;
-  (this.s1 + " " + this.cnt).Print();
-  this.cnt = 0;
-  this.Echo();
-  this.cnt = 0;
-  this.Echo();
-
-  //(1 + 2).Print();
-  this.t1.Load(123);
-
-  this.t3 = this.t2 = this.t1;
-
-  this.t1.Show();
-  this.t2.Show();
-
-  //this.t3 = this.t1 + this.t2;
-  this.t3.Show();
-
-  this.s1.Print();
-  this.s2.Show();
-
-  l : Number = 10;
-  c : Number = 10;
-
-  l = 0;
-  c = 775;
-
-  while (l < 80) {
-    l = l + 1;
-    c = c + 1;
-    c = c + 1;
-    c = c + 1;
-    c = c + 1;
-    c = c + 1;
-    c = c + 1;
-    c = c + 1;
-    c = c + 1;
-  }
-
-  c.Print();
-*/
-  //this.s1.a.Print();
-/*
-
-  this.Echo();
-  this.Echo();
-  this.Echo();
-
-  this.t1 = this.t2;
-
-  this.t1.Show();
-
-  this.t2.a = 333;
-  this.t2.Show();
-  this.t1.Show();
-
-  this.t1.a.Print();
-
-  this.c1.motor.a.Print();
-  this.c1.motor.a = 999;
-  this.c1.motor.a.Print();
-
-  this.c2.motor.a.Print();
-
-  this.t1.a.Print();
-
-  (t1.Value() + t1.Value() + t1.a).Print();
-  
-  t1.a.Print();
-  t1.Value().Print();
-  c1.motor.Value().Print();
-  c1.motor.a.Print();
-  c1.GetMotor().a.Print();
-  c1.GetMotor().Value().Print();
-  */
+  ("t1: " + this.t1.ToString()).Print();
+  ("ttt: " + this.ttt.ToString()).Print();
 }

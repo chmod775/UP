@@ -125,13 +125,14 @@ typedef enum {
 
   TOKEN_NULL, TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
 
-  TOKEN_CommentBlock_End,
+  TOKEN_CommentBlock_End, TOKEN_DirectChildren,
 
   TOKEN_This, TOKEN_Return, TOKEN_Super, TOKEN_Root,
 
   TOKEN_If, TOKEN_Else, TOKEN_While, TOKEN_For, TOKEN_Switch,
-  TOKEN_Link,
-  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak, TOKEN_Dot
+  TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak,
+  
+  TOKEN_Dot, TOKEN_Link
 } e_token;
 
 typedef struct {
@@ -449,7 +450,8 @@ typedef enum {
   OP_MethodCall,
   OP_UseTemporaryInstance,
   OP_LoadThis,
-  OP_LoadReturn
+  OP_LoadReturn,
+  OP_Link
 } e_expression_operation_type;
 
 typedef union {
