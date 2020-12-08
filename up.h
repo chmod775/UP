@@ -337,7 +337,7 @@ typedef struct {
 
 typedef struct {
   s_scope *scope;
-  s_symbol *parent;
+  s_list *parents; // <s_symbol<class>>
   s_list *constructors; // <s_method_def>
   s_list *fields; // <s_symbol<field>>
   s_list *methods; // <s_symbol<method>>
@@ -430,7 +430,7 @@ void compiler_Next(s_compiler *compiler);
 s_statement *statement_Create(s_statement *parent, s_scope *scope, e_statementtype type);
 
 s_statement *statement_CreateInside(s_statement *parent, e_statementtype type);
-s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type);
+s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type, s_scope *forcedScope);
 s_statement *statement_CreateBlock(s_statement *parent);
 
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent);
@@ -533,6 +533,8 @@ s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args);
 
 s_class_instance *class_CreateInstance(s_symbol *class);
 
+void *class_DeriveFrom(s_statement *dest, s_symbol *src);
+
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 
@@ -565,7 +567,12 @@ void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
 void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
 
 // SDK
-s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *method);
+s_symbol *sdk_class_Create(char *name, s_symbol *parent_class);
+s_method_def *sdk_class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
+s_method_def *sdk_class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
+s_class_instance *sdk_class_CreateInstance(s_symbol *class);
+
+s_class_instance *sdk_class_ExecuteMethod(s_class_instance *target, s_method_def *method);
 
 typedef struct {
   bool isDecimal;

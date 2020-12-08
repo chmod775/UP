@@ -34,10 +34,17 @@ Test {
   }
 }
 
+Test.Abc {
+  p : Number = Number(8);
+  () {}
+}
+
 
 t1 : Test = Test();
 
 ttt : Test = Test();
+
+ppp : Test.Abc = Test.Abc();
 
 Main() {
   this.t1.a = 555;

@@ -722,12 +722,12 @@ s_statement *statement_CreateInside(s_statement *parent, e_statementtype type) {
   return ret;
 }
 
-s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type) {
+s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type, s_scope *forcedScope) {
 	PANALYSIS("statement_CreateChildren");
   s_statement *ret = NEW(s_statement);
 
   ret->parent = parent;
-  ret->scope = scope_Create(parent->scope);
+  ret->scope = scope_Create(forcedScope == NULL ? parent->scope : forcedScope);
 
   ret->type = type;
   ret->temporaries = list_create();
@@ -738,7 +738,7 @@ s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type)
 
 s_statement *statement_CreateBlock(s_statement *parent) {
 	PANALYSIS("statement_CreateBlock");
-  s_statement *ret = statement_CreateChildren(parent, STATEMENT_BLOCK);
+  s_statement *ret = statement_CreateChildren(parent, STATEMENT_BLOCK, NULL);
   
   ret->exe_cb = &__core_exe_statement;
 
@@ -756,13 +756,13 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
   ret->type = STATEMENT_CLASS_DEF;
   ret->parent = NULL;
   ret->exe_cb = NULL;
+  ret->temporaries = list_create();
+
+  ret->scope = scope_CreateAsRoot();
+  if (!ret->scope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_Create("Program", compiler->rootScope);
-
-  ret->scope = ret->body.class_def->symbol->body.class->scope;
-
-  ret->temporaries = list_create();
 
   return ret;
 }
@@ -771,9 +771,6 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
 s_compiler *compiler_Init(char *content) {
 	PANALYSIS("compiler_Init");
   s_compiler *ret = NEW(s_compiler);
-
-  ret->rootScope = scope_CreateAsRoot();
-  if (!ret->rootScope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
   ret->rootStatement = statement_CreateRoot(ret);
   if (!ret->rootStatement) { PERROR("compiler_Init", "Could not create root class statement"); return NULL; }
@@ -1100,7 +1097,7 @@ s_symbol *class_Create(char *name, s_scope *scope) {
   s_symbol *symbol = symbol_Create(name, SYMBOL_CLASS, -1);
 
   symbol->body.class = NEW(s_symbolbody_class);
-  symbol->body.class->parent = NULL;
+  symbol->body.class->parents = list_create();
   symbol->body.class->scope = scope_Create(scope);
   symbol->body.class->fields = list_create();
   symbol->body.class->methods = list_create();
@@ -1352,31 +1349,76 @@ void compile_ClassBody(s_compiler *compiler, s_statement *class) {
   }
 }
 
+void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
+  if (dest->type != STATEMENT_CLASS_DEF) PERROR("class_DeriveFrom", "Destination statement is not a class definition.");
+  if (src->type != SYMBOL_CLASS) PERROR("class_DeriveFrom", "Source symbol is not a class.");
+
+  s_list *l = NULL;
+  s_list_item *l_item = NULL;
+  u_int64_t idx;
+
+  s_symbol *class_symbol = dest->body.class_def->symbol;
+
+  // Create sub scope
+  dest->scope = scope_Create(src->body.class->scope);
+  class_symbol->body.class->scope = dest->scope;
+
+  // Copy fields
+  l = src->body.class->fields;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    list_push(class_symbol->body.class->fields, l_item->payload);
+    l_item = list_get_next(l_item);
+  }
+
+  // Copy methods
+  l = src->body.class->methods;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    list_push(class_symbol->body.class->methods, l_item->payload);
+    l_item = list_get_next(l_item);
+  }
+
+  // Copy constructors
+  l = src->body.class->constructors;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    list_push(class_symbol->body.class->constructors, l_item->payload);
+    l_item = list_get_next(l_item);
+  }
+}
+
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_ClassDefinition");
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compiler_ClassDefinition", "Wrong statement for class definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compiler_ClassDefinition", "Wrong parent symbol.");
 
+  s_statement *ret = NULL;
+
   s_symbol *class_symbol = token.content.symbol;
   s_symbol *parent_symbol = parent->body.class_def->symbol; // Direct Inheritance
-
-  match(parent->scope, TOKEN_Symbol);
-
-  if (token.type == TOKEN_Dot) { // External Inheritance
-    // ClassA.ClassB...ClassC.Children {}
-    match(parent->scope, TOKEN_Dot);
-  }
-
-  s_statement *ret = NULL;
+  s_scope *parent_scope = parent->scope;
 
   if ((class_symbol->type > SYMBOL_NOTDEFINED) && (class_symbol->type != SYMBOL_CLASS)) CERROR(compiler, "compiler_ClassDefinition", "Symbol already defined.");
 
+  match(parent->scope, TOKEN_Symbol);
+
+  while (token.type == TOKEN_Dot) {
+    if (class_symbol->type != SYMBOL_CLASS) CERROR(compiler, "compiler_ClassDefinition", "Symbol not defined.");
+
+    match(class_symbol->body.class->scope, TOKEN_Dot);
+
+    class_symbol = token.content.symbol;
+
+    match(parent->scope, TOKEN_Symbol);
+  }
+
   if (class_symbol->type == SYMBOL_NOTDEFINED) {
-    ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF);
+    ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF, parent_scope);
 
     class_symbol->type = SYMBOL_CLASS;
     class_symbol->body.class = NEW(s_symbolbody_class);
-    class_symbol->body.class->parent = parent_symbol;
+    class_symbol->body.class->parents = list_create();
     class_symbol->body.class->fields = list_create();
     class_symbol->body.class->methods = list_create();
     class_symbol->body.class->constructors = list_create();
@@ -1394,44 +1436,15 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
 
     while (token.type != '{') {
       s_symbol *ex_class = token.content.symbol;
-      if (ex_class->type != SYMBOL_CLASS) CERROR(compiler, "compile_ClassDefinition", "Derivation symbol is not a class.");
 
-      s_list *l = NULL;
-      s_list_item *l_item = NULL;
-      u_int64_t idx;
-
-      // Create sub scope
-      ret->scope = scope_Create(ex_class->body.class->scope);
-      class_symbol->body.class->scope = ret->scope;
-
-      // Copy fields
-      l = ex_class->body.class->fields;
-      l_item = list_get_first(l);
-      for (idx = 0; idx < l->items_count; idx++) {
-        list_push(class_symbol->body.class->fields, l_item->payload);
-        l_item = list_get_next(l_item);
-      }
-
-      // Copy methods
-      l = ex_class->body.class->methods;
-      l_item = list_get_first(l);
-      for (idx = 0; idx < l->items_count; idx++) {
-        list_push(class_symbol->body.class->methods, l_item->payload);
-        l_item = list_get_next(l_item);
-      }
-
-      // Copy constructors
-      l = ex_class->body.class->constructors;
-      l_item = list_get_first(l);
-      for (idx = 0; idx < l->items_count; idx++) {
-        list_push(class_symbol->body.class->constructors, l_item->payload);
-        l_item = list_get_next(l_item);
-      }
+      class_DeriveFrom(ret, ex_class);
 
       match(parent->scope, TOKEN_Symbol);
       if (token.type == ',')
         match(parent->scope, ',');
     }
+  } else if (token.type == TOKEN_DirectChildren) {
+    class_DeriveFrom(ret, parent_symbol);
   }
 
   match(ret->scope, '{');
