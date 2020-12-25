@@ -6,6 +6,10 @@
 #ifndef UP
 #define UP
 
+/* ##### Colors heaven ##### */
+#define NORMAL(C, T) "\033[0m\033[0;" C "m" T "\033[0m"
+#define BOLD(C, T) "\033[0m\033[0;" C "m\033[1m" T "\033[0m"
+
 /* ##### Helpers shit ##### */
 FILE *openFile(char *filename);
 
@@ -121,7 +125,9 @@ T stack_pop__##N(s_stack__##N *s) { \
 } \
 
 typedef enum {
-  TOKEN_Symbol = 128, TOKEN_Debug,
+  TOKEN_Symbol = 128,
+  
+  TOKEN_Debug_Info, TOKEN_Debug_Breakpoint,
 
   TOKEN_NULL, TOKEN_Literal_Int, TOKEN_Literal_Real, TOKEN_Literal_String,
 
@@ -213,7 +219,8 @@ typedef enum {
   STATEMENT_CLASS_DEF,
   STATEMENT_CONSTRUCTOR_DEF,
   STATEMENT_EXPRESSION,
-  STATEMENT_DEBUG
+  STATEMENT_DEBUG_INFO,
+  STATEMENT_DEBUG_BREAKPOINT
 } e_statementtype;
 
 typedef enum {
@@ -277,6 +284,11 @@ typedef struct {
   s_list *operations; // <s_expression_operation>
 } s_statementbody_expression;
 
+typedef struct {
+  s_symbol *symbol;
+  char *comment;
+} s_statementbody_debug_def;
+
 typedef union {
   s_statementbody_block *block;
   s_statementbody_if *_if;
@@ -290,6 +302,7 @@ typedef union {
   s_statementbody_class_def *class_def;
   s_statementbody_constructor_def *constructor_def;
   s_statementbody_expression *expression;
+  s_statementbody_debug_def *debug;
 } u_statementbody;
 
 struct _s_statement {
@@ -445,13 +458,14 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 /* ##### Expression ##### */
 typedef enum {
   OP_NULL = 0x00,
-  OP_AccessSymbol,
+  OP_LoadSymbol,
   OP_ConstructorCall,
   OP_MethodCall,
   OP_UseTemporaryInstance,
   OP_LoadThis,
   OP_LoadReturn,
-  OP_Link
+  OP_Link,
+  OP_AccessSymbol
 } e_expression_operation_type;
 
 typedef union {
@@ -538,6 +552,9 @@ void *class_DeriveFrom(s_statement *dest, s_symbol *src);
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
 
+s_statement *compile_Debug(s_compiler *compiler, s_statement *parent);
+s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent);
+
 /* ##### CORE libs ##### */
 define_stack(s_class_instance *, s_class_instance_ptr);
 s_stack__s_class_instance_ptr stack;
@@ -560,6 +577,7 @@ e_statementend __core_for(s_exe_scope exe);
 e_statementend __core_while(s_exe_scope exe);
 
 e_statementend __core_debug(s_exe_scope exe);
+e_statementend __core_breakpoint(s_exe_scope exe);
 
 /* ##### Generic object LIB ##### */
 void object_Assign(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
@@ -567,11 +585,6 @@ void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
 void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
 
 // SDK
-s_symbol *sdk_class_Create(char *name, s_symbol *parent_class);
-s_method_def *sdk_class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
-s_method_def *sdk_class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
-s_class_instance *sdk_class_CreateInstance(s_symbol *class);
-
 s_class_instance *sdk_class_ExecuteMethod(s_class_instance *target, s_method_def *method);
 
 typedef struct {

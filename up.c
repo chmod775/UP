@@ -386,8 +386,6 @@ s_scope *scope_CreateAsRoot() {
   scope_AddSymbol(ret, symbol_CreateFromKeyword("return", TOKEN_Return));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("super", TOKEN_Super));
 
-  scope_AddSymbol(ret, symbol_CreateFromKeyword("DEBUG", TOKEN_Debug));
-
   return ret;
 }
 
@@ -663,6 +661,14 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       } else {
         ret(token, NULL, any);
       }
+    }
+    else if (token == '@') {
+      if (*src == '@') {
+        src ++;
+        ret(TOKEN_Debug_Info, NULL, any);
+      } else {
+        ret(TOKEN_Debug_Breakpoint, NULL, any);
+      }
     } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',') {
       // directly return the character as token;
       ret(token, NULL, any);
@@ -756,13 +762,13 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
   ret->type = STATEMENT_CLASS_DEF;
   ret->parent = NULL;
   ret->exe_cb = NULL;
-  ret->temporaries = list_create();
-
-  ret->scope = scope_CreateAsRoot();
-  if (!ret->scope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_Create("Program", compiler->rootScope);
+
+  ret->scope = ret->body.class_def->symbol->body.class->scope;
+
+  ret->temporaries = list_create();
 
   return ret;
 }
@@ -771,6 +777,9 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
 s_compiler *compiler_Init(char *content) {
 	PANALYSIS("compiler_Init");
   s_compiler *ret = NEW(s_compiler);
+
+  ret->rootScope = scope_CreateAsRoot();
+  if (!ret->rootScope) { PERROR("compiler_Init", "Could not create root scope"); return NULL; }
 
   ret->rootStatement = statement_CreateRoot(ret);
   if (!ret->rootStatement) { PERROR("compiler_Init", "Could not create root class statement"); return NULL; }
@@ -846,7 +855,7 @@ s_expression_operation *expression_Emit(s_list *core_operations, e_expression_op
 s_symbol *expression_GetClassOfOperation(s_expression_operation *operation) {
   s_symbol *ret = NULL;
 
-  if (operation->type == OP_AccessSymbol) {
+  if (operation->type == OP_LoadSymbol) {
     ret = operation->payload.symbol->body.field->value.type;
   } else if ((operation->type == OP_LoadThis) || (operation->type == OP_LoadReturn)) {
     ret = operation->payload.symbol;
@@ -1008,8 +1017,13 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
         CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
       }
     } else { // Symbol access
-      op = expression_Emit(operations, OP_AccessSymbol);
-      op->payload.symbol = symbol;
+      if (symbol->type == SYMBOL_CLASS) {
+        op = expression_Emit(operations, OP_AccessSymbol);
+        op->payload.symbol = symbol;
+      } else {
+        op = expression_Emit(operations, OP_LoadSymbol);
+        op->payload.symbol = symbol;
+      }
     }
   } else if (token.type == '(') {
     match(scope, '(');
@@ -1045,7 +1059,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       s_scope *parent_scope = scope;
 
       s_expression_operation *last_op = op;
-      if ((last_op->type == OP_AccessSymbol) || (last_op->type == OP_LoadThis) || (last_op->type == OP_LoadReturn)) {
+      if ((last_op->type == OP_AccessSymbol) || (last_op->type == OP_LoadSymbol) || (last_op->type == OP_LoadThis) || (last_op->type == OP_LoadReturn)) {
         s_symbol *op_symbol = last_op->payload.symbol;
         if (op_symbol->type == SYMBOL_FIELD) {
           parent_scope = op_symbol->body.field->value.type->body.class->scope;
@@ -1815,6 +1829,49 @@ s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+s_statement *compile_Debug(s_compiler *compiler, s_statement *parent) {
+	PANALYSIS("compile_Debug");
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_DEBUG_INFO);
+  ret->exe_cb = &__core_debug;
+
+  match(ret->scope, TOKEN_Debug_Info);
+
+  ret->body.debug = NEW(s_statementbody_debug_def);
+
+  if (token.type != TOKEN_Symbol) CERROR(compiler, "compile_Debug", "Expected symbol after debug keyword.");
+  ret->body.debug->symbol = token.content.symbol;
+  match(ret->scope, TOKEN_Symbol);
+
+  // Check presence of comment
+  if (token.type == ',') {
+    match(ret->scope, ',');
+
+    if (token.type != TOKEN_Literal_String) CERROR(compiler, "compile_Debug", "Expected string literal for comment.")
+
+    ret->body.debug->comment = token.content.string;
+    match(ret->scope, TOKEN_Literal_String);
+  }
+
+  return ret;
+}
+
+s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent) {
+	PANALYSIS("compile_Breakpoint");
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_DEBUG_BREAKPOINT);
+  ret->exe_cb = &__core_breakpoint;
+
+  match(ret->scope, TOKEN_Debug_Breakpoint);
+
+  ret->body.debug = NEW(s_statementbody_debug_def);
+
+  if (token.type == TOKEN_Literal_String) {
+    ret->body.debug->comment = token.content.string;
+    match(ret->scope, TOKEN_Literal_String);
+  }
+
+  return ret;
+}
+
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_DefinitionStatement");
   // Definition statements types:
@@ -1875,10 +1932,10 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     ret = compile_If(compiler, parent);
   } else if (token.type == TOKEN_For) {
 
-  } else if (token.type == TOKEN_Debug) {
-    ret = statement_CreateInside(parent, STATEMENT_DEBUG);
-    ret->exe_cb = &__core_debug;
-    match(ret->scope, TOKEN_Debug);
+  } else if (token.type == TOKEN_Debug_Info) {
+    ret = compile_Debug(compiler, parent);
+  } else if (token.type == TOKEN_Debug_Breakpoint) {
+    ret = compile_Breakpoint(compiler, parent);
   } else if (token.type == TOKEN_While) {
     ret = compile_While(compiler, parent);
   } else if (token.type == '{') {
@@ -2001,7 +2058,30 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
 
 e_statementend __core_debug(s_exe_scope exe) {
 	PANALYSIS("__core_debug");
-  int a = 0;
+
+  s_symbol *symbol = exe.statement->body.debug->symbol;
+  char *cleanSymbolName = symbol_GetCleanName(symbol);
+
+  if (exe.statement->body.debug->comment)
+    printf(BOLD("33", "INFO:") NORMAL("33", " %s") "\n", exe.statement->body.debug->comment);
+  else
+    printf(BOLD("33", "INFO symbol:") NORMAL("33", " %s") "\n", cleanSymbolName);
+
+  printf("\t" BOLD("33", "Type:") NORMAL("33", " %s") "\n");
+
+  return STATEMENT_END_CONTINUE;
+}
+
+e_statementend __core_breakpoint(s_exe_scope exe) {
+	PANALYSIS("__core_breakpoint");
+
+  if (exe.statement->body.debug->comment)
+    printf("\033[0;33m\033[1mBREAKPOINT:\033[0m\033[0;33m %s \033[0m(Press ENTER key to continue)\n", exe.statement->body.debug->comment);
+  else
+    printf("\033[0;33mBREAKPOINT \033[0m(Press ENTER key to continue)\n");
+  
+  getchar();
+
   return STATEMENT_END_CONTINUE;
 }
 
@@ -2085,7 +2165,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
     s_expression_operation *op = pos->payload;
     pos = list_get_next(pos);
 
-    if (op->type == OP_AccessSymbol) {
+    if (op->type == OP_LoadSymbol) {
       s_class_instance *value = NULL;
       if (op->payload.symbol->type == SYMBOL_ARGUMENT) {
         value = op->payload.symbol->body.argument->value.data;
@@ -2099,6 +2179,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       }
 
       stack_push__s_class_instance_ptr(&stack, value);
+    } else if (op->type == OP_AccessSymbol) {
     } else if (op->type == OP_UseTemporaryInstance) {
       stack_push__s_class_instance_ptr(&stack, op->payload.temporary);
     } else if (op->type == OP_LoadReturn) {

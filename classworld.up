@@ -8,15 +8,31 @@ String {
   Add(src : Number) : String {
     return = this + src.ToString();
   }
+
+  Mul(src : Number) : String {
+    return = "";
+    i : Number = 0;
+    
+    @"Attesa i corretto"
+    @@i, "Prova"
+    @@i
+
+    while (i < src) {
+      i = i + 1;
+      return = return + this;
+    }
+  }
 }
 
 Test {
   a : Number = Number(775);
 
-  Children {
-    b : Number = 789;
-
+  Abc {
+    p : Number = Number(8);
     () {}
+    Show() {
+      this.p.Print();
+    }
   }
 
   () {}
@@ -34,9 +50,13 @@ Test {
   }
 }
 
-Test.Abc {
-  p : Number = Number(8);
+Test.Children : Test {
+  b : Number = Number(789);
   () {}
+  ShowAll() {
+    this.a.Print();
+    this.b.Print();
+  }
 }
 
 
@@ -45,6 +65,7 @@ t1 : Test = Test();
 ttt : Test = Test();
 
 ppp : Test.Abc = Test.Abc();
+ccc : Test.Children = Test.Children();
 
 Main() {
   this.t1.a = 555;
@@ -58,4 +79,15 @@ Main() {
 
   ("t1: " + this.t1.ToString()).Print();
   ("ttt: " + this.ttt.ToString()).Print();
+
+  "ppp".Print();
+  this.ppp.Show();
+
+  "ccc Show".Print();
+  this.ccc.Show();
+
+  "ccc ShowAll".Print();
+  this.ccc.ShowAll();
+
+  ("hello" * 50).Print();
 }
