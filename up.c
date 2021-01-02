@@ -2056,6 +2056,15 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
   return ret;
 }
 
+void debug_info_class(s_symbol *class) {
+
+}
+
+void debug_info_field(char *prefix, s_symbol *symbol) {
+  printf("%s" BOLD(COLOR_YELLOW, "Content index:") NORMAL(COLOR_YELLOW, " %d") "\n", prefix, symbol->body.field->value.data_index);
+  printf("%s" BOLD(COLOR_YELLOW, "Content type:") NORMAL(COLOR_YELLOW, " %s") "\n", prefix, symbol_GetCleanName(symbol->body.field->value.type));
+}
+
 e_statementend __core_debug(s_exe_scope exe) {
 	PANALYSIS("__core_debug");
 
@@ -2063,11 +2072,23 @@ e_statementend __core_debug(s_exe_scope exe) {
   char *cleanSymbolName = symbol_GetCleanName(symbol);
 
   if (exe.statement->body.debug->comment)
-    printf(BOLD("33", "INFO:") NORMAL("33", " %s") "\n", exe.statement->body.debug->comment);
+    printf(BOLD(COLOR_YELLOW, "INFO:") NORMAL(COLOR_YELLOW, " %s") "\n", exe.statement->body.debug->comment);
   else
-    printf(BOLD("33", "INFO symbol:") NORMAL("33", " %s") "\n", cleanSymbolName);
+    printf(BOLD(COLOR_YELLOW, "INFO symbol:") NORMAL(COLOR_YELLOW, " %s") "\n", cleanSymbolName);
 
-  printf("\t" BOLD("33", "Type:") NORMAL("33", " %s") "\n");
+  printf("\t" BOLD(COLOR_YELLOW, "Type:") NORMAL(COLOR_YELLOW, " %s") NORMAL(COLOR_YELLOW, " - %p") "\n", debug_symboltype[symbol->type],  &symbol);
+
+  switch (symbol->type) {
+    case SYMBOL_FIELD:
+      debug_info_field("\t", symbol);
+      break;
+    
+    case SYMBOL_CLASS:
+
+      break;
+  }
+
+  printf("\n");
 
   return STATEMENT_END_CONTINUE;
 }

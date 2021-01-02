@@ -5,6 +5,7 @@ v0.3
   + String class
   + Integrate real with Number class
   - Use proper Assign for field initialization (otherwise it's like having a pointer to the literal instance)
+  [BUG]- Local field initialization not working
   - List and Dictionary classes
   - FOR statement
   - SWITCH statement
@@ -12,14 +13,15 @@ v0.3
   OK - [BUG]- (this + "a").Print(); 
   [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
   - Method arguments must be sa local field with initialized value from call argument
-  [BUG]- Local field initialization not working
   - Garbage collection and reusable class instances in class_CreateInstance
     + Use a list in the global class with all the created instances. If list is not empty pull from that, otherwise create new instance
     + Always call constructor and fields initialization
-
-v0.4
   - Full class inheritance
   - Method / Field override behaviour
+
+v0.4
+  - Try / Catch
+  - Reflections
   - Regex (using class ?)
   - JSON (using class ?)
 
@@ -27,8 +29,6 @@ v?
   - JSON export / import for every object
   - Dump / Load all memory to a JSON (like saving a snapshot for old NES games)
   - GIT like included features for "seamless" switch to changes in software (using above feature JSON dump/load)
-  - Try / Catch
   - Method failover (default return with generic exception)
   - Async methods
-  - Reflections
   - Generics in classes (like C#)

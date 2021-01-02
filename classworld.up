@@ -13,10 +13,6 @@ String {
     return = "";
     i : Number = 0;
     
-    @"Attesa i corretto"
-    @@i, "Prova"
-    @@i
-
     while (i < src) {
       i = i + 1;
       return = return + this;
@@ -38,6 +34,8 @@ Test {
   () {}
 
   Show() {
+    @@a;
+
     this.a.Print();
   }
 

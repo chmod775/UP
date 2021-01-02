@@ -7,6 +7,13 @@
 #define UP
 
 /* ##### Colors heaven ##### */
+#define COLOR_RED "31"
+#define COLOR_GREEN "32"
+#define COLOR_YELLOW "33"
+#define COLOR_BLUE "34"
+#define COLOR_MAGENTA "35"
+#define COLOR_CYAN "36"
+
 #define NORMAL(C, T) "\033[0m\033[0;" C "m" T "\033[0m"
 #define BOLD(C, T) "\033[0m\033[0;" C "m\033[1m" T "\033[0m"
 
@@ -324,6 +331,16 @@ typedef enum {
   SYMBOL_LOCAL,
   SYMBOL_CLASS
 } e_symboltype;
+
+const char *debug_symboltype[] = {
+  "NOTDEFINED",
+  "KEYWORD",
+  "FIELD",
+  "METHOD",
+  "ARGUMENT",
+  "LOCAL",
+  "CLASS"
+};
 
 typedef struct {
   e_token token;
