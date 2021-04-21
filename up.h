@@ -371,6 +371,7 @@ typedef struct {
   s_list *constructors; // <s_method_def>
   s_list *fields; // <s_symbol<field>>
   s_list *methods; // <s_symbol<method>>
+  s_method_def *operator_methods[sizeof(token_operators) / sizeof(token_operators[0])];
 } s_symbolbody_class;
 
 typedef union {

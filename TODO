@@ -2,6 +2,7 @@ v0.2
   REMOVED - Put casting and type conversion on compiler side. (not on __core execution)
 
 v0.3
+  + More informative error log
   + String class
   + Integrate real with Number class
   - Use proper Assign for field initialization (otherwise it's like having a pointer to the literal instance)

@@ -16,8 +16,8 @@ FILE *fanalysis;
 #define PANALYSIS 
 #endif
 
-#define PERROR(A, B, ...) { printf("\033[0;31m[" A "] Error! - " B "\033[0m\n", ##__VA_ARGS__); exit(-1); }
-#define CERROR(C, A, B, ...) { printf("\033[0;31m[" A "] Error Line: %d - " B "\033[0m\n", (C->parser->line) ##__VA_ARGS__); exit(-1); }
+#define PERROR(A, B, ...) { printf("\033[0;31m[" A "] Error! - " B "\033[0m\n", ##__VA_ARGS__ ); exit(-1); }
+#define CERROR(C, A, B, ...) { printf("\033[0;31m[" A "] Error Line: %d - " B "\033[0m\n", (C->parser->line), ##__VA_ARGS__ ); exit(-1); }
 
 void *t_new = NULL;
 #define NEW(T) t_new = malloc(sizeof(T)); if (t_new == NULL) { PERROR("NEW(##T)", "Could not malloc"); exit(-1); }
@@ -977,7 +977,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   } else if (token.type == TOKEN_Symbol) {
     s_symbol *symbol = token.content.symbol;
     if (symbol->type == SYMBOL_NOTDEFINED)
-      CERROR(compiler, "expression_Step", "Symbol not defined.");
+      CERROR(compiler, "expression_Step", "Symbol \"%s\" not defined.", symbol_GetCleanName(symbol));
 
     match(scope, TOKEN_Symbol);
 
@@ -1106,16 +1106,22 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
 }
 
 
+void class_InitEmpty(s_symbol *class_symbol, s_scope *scope) {
+  class_symbol->type = SYMBOL_CLASS;
+  class_symbol->body.class = NEW(s_symbolbody_class);
+  class_symbol->body.class->scope = scope;
+  class_symbol->body.class->parents = list_create();
+  class_symbol->body.class->fields = list_create();
+  class_symbol->body.class->methods = list_create();
+  class_symbol->body.class->constructors = list_create();
+  memset(class_symbol->body.class->operator_methods, NULL, sizeof(class_symbol->body.class->operator_methods));
+}
+
 s_symbol *class_Create(char *name, s_scope *scope) {
 	PANALYSIS("class_Create");
   s_symbol *symbol = symbol_Create(name, SYMBOL_CLASS, -1);
 
-  symbol->body.class = NEW(s_symbolbody_class);
-  symbol->body.class->parents = list_create();
-  symbol->body.class->scope = scope_Create(scope);
-  symbol->body.class->fields = list_create();
-  symbol->body.class->methods = list_create();
-  symbol->body.class->constructors = list_create();
+  class_InitEmpty(symbol, scope_Create(scope));
 
   scope_AddSymbol(scope, symbol);
 
@@ -1240,13 +1246,22 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
   newMethod->hash = hash;
 
   // Check already defined Method overload
-  s_method_def *m = list_read_first(symbol_name->body.method->overloads);
-  while (m != NULL) {
+  s_list *l = symbol_name->body.method->overloads;
+  s_list_item *li = list_get_first(l);
+  u_int64_t idx;
+  for (idx = 0; idx < l->items_count; idx++) {
+    s_method_def *m = li->payload;
+
     if (hash == m->hash) {
       // ### TODO: Deep check for memory content, not only hash
-      PERROR("class_CreateConstructor", "Constructor overload already defined.");
+      // CERROR(compiler, "class_CreateMethod", "Method overload already defined.");
+
+      // Removed old overload and exit
+      list_remove_item(l, li);
+      break;
     }
-    m = list_read_next(symbol_name->body.method->overloads);
+
+    li = list_get_next(li);
   }
 
   // Push to overloads
@@ -1429,14 +1444,7 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
 
   if (class_symbol->type == SYMBOL_NOTDEFINED) {
     ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF, parent_scope);
-
-    class_symbol->type = SYMBOL_CLASS;
-    class_symbol->body.class = NEW(s_symbolbody_class);
-    class_symbol->body.class->parents = list_create();
-    class_symbol->body.class->fields = list_create();
-    class_symbol->body.class->methods = list_create();
-    class_symbol->body.class->constructors = list_create();
-    class_symbol->body.class->scope = ret->scope;
+    class_InitEmpty(class_symbol, ret->scope);
   } else {
     ret = statement_Create(parent, class_symbol->body.class->scope, STATEMENT_CLASS_DEF);
   }
@@ -1460,6 +1468,9 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
   } else if (token.type == TOKEN_DirectChildren) {
     class_DeriveFrom(ret, parent_symbol);
   }
+
+//  s_method_def *assign_method = class_CreateMethod(class_symbol, "Assign", &object_Assign, class_symbol->name, 1, class_symbol->name);
+//  class_symbol->body.class->operator_methods[TOKEN_Assign - TOKEN_Assign] = assign_method;
 
   match(ret->scope, '{');
 
@@ -1510,7 +1521,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
 
   newMethod->hash = hash;
 
-  // Check already defined Method overload
+  // Check already defined Costructor overload
   s_list *l = parent->body.class_def->symbol->body.class->constructors;
   s_list_item *li = list_get_first(l);
   u_int64_t idx;
@@ -1908,7 +1919,7 @@ s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *pare
     // Constructor method definition
     ret = compile_ConstructorMethodDefinition(compiler, parent);
   } else {
-    CERROR(compiler, "compile_DefinitionStatement", "Statement not valid.");
+    CERROR(compiler, "compile_DefinitionStatement", "Statement \"%c (%d)\" not valid.", token.type, token.type);
   }
 
   return ret;

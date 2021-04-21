@@ -31,7 +31,12 @@ Test {
     }
   }
 
-  () {}
+  g : Abc = Abc();
+
+  () {
+    @@g;
+    //this.g.Print();
+  }
 
   Show() {
     @@a;
@@ -45,6 +50,11 @@ Test {
 
   Assign(src : Test) {
     this.a = src.a;
+  }
+
+  Change(val : Number) {
+    val = val + 1;
+    val = 775;
   }
 }
 
@@ -65,9 +75,13 @@ ttt : Test = Test();
 ppp : Test.Abc = Test.Abc();
 ccc : Test.Children = Test.Children();
 
+n : Number = 123;
+
 Main() {
+  @@t1;
+
   this.t1.a = 555;
-  this.ttt => this.t1;
+  this.ttt = this.t1;
 
   ("t1: " + this.t1.ToString()).Print();
   ("ttt: " + this.ttt.ToString()).Print();
@@ -88,4 +102,10 @@ Main() {
   this.ccc.ShowAll();
 
   ("hello" * 50).Print();
+
+  this.n.Print();
+  this.t1.Change(this.n);
+  this.n.Print();
+
+  this.ttt.g.Show();
 }
