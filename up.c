@@ -6,7 +6,7 @@
 
 #include "up.h"
 
-//#define ANALYSIS
+#define ANALYSIS
 
 FILE *fanalysis;
 
@@ -990,6 +990,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       while (token.type != ')') {
         s_expression_operation *ret = expression_Step(compiler, statement, scope, operations, TOKEN_Assign);
         list_push(args, ret);
+
+        if (token.type == ',')
+          match(scope, ',');
       }
 
       match(scope, ')');
@@ -1004,8 +1007,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
         // Search constructor overload
         s_method_def *found_constructor = list_read_first(symbol->body.class->constructors);
         while (found_constructor != NULL) {
-          if (found_constructor->arguments->items_count == args->items_count) // TEMPORARY SEARCH FROM ARGUMENTS COUNT
-            break;
+          if (found_constructor->arguments->items_count == args->items_count)
+            if (method_CheckArgumentTypes(found_constructor, args))
+              break;
           found_constructor = list_read_next(symbol->body.class->constructors);
         }
 
@@ -1093,6 +1097,11 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_Expression");
+  return compile_CustomExpression(compiler, parent, NULL, NULL, NULL);
+}
+
+s_statement *compile_CustomExpression(s_compiler *compiler, s_statement *parent, s_list *before_operations, s_list *after_operations, s_expression_operation **ret_operation) {
+	PANALYSIS("compile_CustomExpression");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_EXPRESSION);
 
   ret->exe_cb = &__core_expression;
@@ -1100,11 +1109,29 @@ s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
   ret->body.expression = NEW(s_statementbody_expression);
   ret->body.expression->operations = list_create();
   
-  expression_Step(compiler, ret, ret->scope, ret->body.expression->operations, TOKEN_Assign);
+  if (before_operations != NULL) {
+    s_expression_operation *op = list_read_first(before_operations);
+    while (op != NULL) {
+      list_push(ret->body.expression->operations, op);
+      op = list_read_next(before_operations);
+    }
+  }
+
+  s_expression_operation *ret_op = expression_Step(compiler, ret, ret->scope, ret->body.expression->operations, TOKEN_Assign);
+
+  if (after_operations != NULL) {
+    s_expression_operation *op = list_read_first(after_operations);
+    while (op != NULL) {
+      list_push(ret->body.expression->operations, op);
+      op = list_read_next(after_operations);
+    }
+  }
+
+  if (ret_operation != NULL)
+    *ret_operation = ret_op;
 
   return ret;
 }
-
 
 void class_InitEmpty(s_symbol *class_symbol, s_scope *scope) {
   class_symbol->type = SYMBOL_CLASS;
@@ -1287,6 +1314,9 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
   while (field_symbol != NULL) {
     s_class_instance *init_value = __core_exe_expression(EXE_SCOPE(NULL, instance, field_symbol->body.field->init_expression));
+
+    if (init_value->class != field_symbol->body.field->value.type) PERROR("class_CreateInstance", "Wrong instance for field \"%s\" initialization. Expected \"%s\", given \"%s\"", symbol_GetCleanName(field_symbol), symbol_GetCleanName(field_symbol->body.field->value.type), symbol_GetCleanName(init_value->class));
+
     instance->data[field_symbol->body.field->value.data_index] = init_value;
 
     field_symbol = list_read_next(instance->class->body.class->fields);
@@ -1295,6 +1325,23 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   return instance;
 }
 
+bool method_CheckArgumentTypes(s_method_def *method, s_list *args) {
+  s_list_item *pos_MethodArg = list_get_first(method->arguments);
+  s_list_item *pos_CallArg = list_get_first(args);
+  u_int64_t idx;
+  for (idx = 0; idx < args->items_count; idx++) {
+    s_symbol *methodArg_symbol = pos_MethodArg->payload;
+    pos_MethodArg = list_get_next(pos_MethodArg);
+    
+    s_expression_operation *callArg_expressionOperation = pos_CallArg->payload;
+    s_symbol *callArg_symbol = expression_GetClassOfOperation(callArg_expressionOperation);
+    pos_CallArg = list_get_next(pos_CallArg);
+
+    if (methodArg_symbol->body.argument->value.type != callArg_symbol) return false;
+  }
+
+  return true;
+}
 
 s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
 	PANALYSIS("method_FindOverload");
@@ -1304,34 +1351,14 @@ s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
 
   s_method_def *found_overload = list_read_first(method->body.method->overloads);
   while (found_overload != NULL) {
-    if (found_overload->arguments->items_count == args->items_count) { // TEMPORARY SEARCH FROM ARGUMENTS COUNT
-      bool argsMatching = true;
-
-      s_list_item *pos_MethodArg = list_get_first(found_overload->arguments);
-      s_list_item *pos_CallArg = list_get_first(args);
-      u_int64_t idx;
-      for (idx = 0; idx < args->items_count; idx++) {
-        s_symbol *methodArg_symbol = pos_MethodArg->payload;
-        pos_MethodArg = list_get_next(pos_MethodArg);
-        
-        s_expression_operation *callArg_expressionOperation = pos_CallArg->payload;
-        s_symbol *callArg_symbol = expression_GetClassOfOperation(callArg_expressionOperation);
-        pos_CallArg = list_get_next(pos_CallArg);
-
-        if (methodArg_symbol->body.argument->value.type != callArg_symbol) {
-          argsMatching = false;
-          break;
-        }
-      }
-
-      if (argsMatching)
+    if (found_overload->arguments->items_count == args->items_count)
+      if (method_CheckArgumentTypes(found_overload, args))
         break;
-    }
     found_overload = list_read_next(method->body.method->overloads);
   }
 
   if (found_overload == NULL)
-    PERROR("method_FindOverload", "Method overload not found.");
+    PERROR("method_FindOverload", "Method \"%s\" overload not found.", symbol_GetCleanName(method));
 
   return found_overload;
 }
@@ -1392,7 +1419,7 @@ void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
   dest->scope = scope_Create(src->body.class->scope);
   class_symbol->body.class->scope = dest->scope;
 
-  // Copy fields
+  // Link fields
   l = src->body.class->fields;
   l_item = list_get_first(l);
   for (idx = 0; idx < l->items_count; idx++) {
@@ -1400,7 +1427,7 @@ void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
     l_item = list_get_next(l_item);
   }
 
-  // Copy methods
+  // Link methods
   l = src->body.class->methods;
   l_item = list_get_first(l);
   for (idx = 0; idx < l->items_count; idx++) {
@@ -1408,7 +1435,7 @@ void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
     l_item = list_get_next(l_item);
   }
 
-  // Copy constructors
+  // Link constructors
   l = src->body.class->constructors;
   l_item = list_get_first(l);
   for (idx = 0; idx < l->items_count; idx++) {
@@ -1425,7 +1452,7 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
   s_statement *ret = NULL;
 
   s_symbol *class_symbol = token.content.symbol;
-  s_symbol *parent_symbol = parent->body.class_def->symbol; // Direct Inheritance
+  s_symbol *parent_symbol = parent->parent == NULL ? NULL : parent->body.class_def->symbol; // Direct Inheritance
   s_scope *parent_scope = parent->scope;
 
   if ((class_symbol->type > SYMBOL_NOTDEFINED) && (class_symbol->type != SYMBOL_CLASS)) CERROR(compiler, "compiler_ClassDefinition", "Symbol already defined.");
@@ -1437,37 +1464,24 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
 
     match(class_symbol->body.class->scope, TOKEN_Dot);
 
+    parent_symbol = class_symbol;
     class_symbol = token.content.symbol;
 
     match(parent->scope, TOKEN_Symbol);
   }
 
-  if (class_symbol->type == SYMBOL_NOTDEFINED) {
+  if (class_symbol->type == SYMBOL_NOTDEFINED) { // Create new class
     ret = statement_CreateChildren(parent, STATEMENT_CLASS_DEF, parent_scope);
     class_InitEmpty(class_symbol, ret->scope);
-  } else {
+  } else { // Extend existing class
     ret = statement_Create(parent, class_symbol->body.class->scope, STATEMENT_CLASS_DEF);
   }
 
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_symbol;
 
-  if (token.type == ':') { // Derivation (multiple classes allowed)
-    // MixClass : ClassA, ClassB, ClassC, ... {}
-    match(parent->scope, ':');
-
-    while (token.type != '{') {
-      s_symbol *ex_class = token.content.symbol;
-
-      class_DeriveFrom(ret, ex_class);
-
-      match(parent->scope, TOKEN_Symbol);
-      if (token.type == ',')
-        match(parent->scope, ',');
-    }
-  } else if (token.type == TOKEN_DirectChildren) {
+  if (parent_symbol != NULL)
     class_DeriveFrom(ret, parent_symbol);
-  }
 
 //  s_method_def *assign_method = class_CreateMethod(class_symbol, "Assign", &object_Assign, class_symbol->name, 1, class_symbol->name);
 //  class_symbol->body.class->operator_methods[TOKEN_Assign - TOKEN_Assign] = assign_method;
@@ -1616,8 +1630,26 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   s_method_def *m = list_read_first(name->body.method->overloads);
   while (m != NULL) {
     if (hash == m->hash) {
-      // ### TODO: Deep check for memory content, not only hash
-      CERROR(compiler, "compile_MethodDefinition", "Method overload already defined.");
+      bool matching = true;
+
+      s_list_item *pos_MethodArg = list_get_first(m->arguments);
+      s_list_item *pos_CallArg = list_get_first(newMethod->arguments);
+      u_int64_t idx;
+      for (idx = 0; idx < newMethod->arguments->items_count; idx++) {
+        s_symbol *methodArg_symbol = pos_MethodArg->payload;
+        pos_MethodArg = list_get_next(pos_MethodArg);
+        
+        s_symbol *callArg_symbol = pos_CallArg->payload;
+        pos_CallArg = list_get_next(pos_CallArg);
+
+        if (methodArg_symbol->body.argument->value.type != callArg_symbol->body.argument->value.type) {
+          matching = false;
+          break;
+        }
+      }
+
+      if (matching)
+        CERROR(compiler, "compile_MethodDefinition", "Method overload \"%s\" already defined.", symbol_GetCleanName(name));
     }
     m = list_read_next(name->body.method->overloads);
   }
@@ -1645,8 +1677,8 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
   if (token.type == TOKEN_Symbol) {
     // Class
     s_symbol *symbol = token.content.symbol;
-    if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol is not a class");
-    if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol is not defined");
+    if (!symbol->isUppercase) CERROR(compiler, "compile_FieldType", "Symbol \"%s\" is not a class", symbol_GetCleanName(symbol));
+    if (symbol->type == SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldType", "Symbol \"%s\" is not defined", symbol_GetCleanName(symbol));
 
     ret = symbol;
 
@@ -1742,14 +1774,9 @@ s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) 
   name->body.field = NEW(s_symbolbody_field);
   name->type = SYMBOL_FIELD;
 
-  name->body.field->value.type = compile_FieldType(compiler, ret);
-  name->body.field->init_expression = NULL;
-
-  if (token.type == TOKEN_Assign) {
-    match(ret->scope, TOKEN_Assign);
-
-    name->body.field->init_expression = compile_Expression(compiler, ret);
-  }
+  s_expression_operation *ret_op = NULL;
+  name->body.field->init_expression = compile_CustomExpression(compiler, ret, NULL, NULL, &ret_op);
+  name->body.field->value.type = expression_GetClassOfOperation(ret_op);
 
   if (ret->body.field_def->symbol->body.field->init_expression == NULL) CERROR(compiler, "compile_FieldDefinition", "Field must have an initiliazation value.");
 
@@ -1777,17 +1804,14 @@ s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *par
   name->body.local = NEW(s_symbolbody_local);
   name->type = SYMBOL_LOCAL;
 
-  name->body.local->value.type = compile_FieldType(compiler, ret);
+  s_expression_operation *ret_op = NULL;
+  name->body.local->init_expression = compile_CustomExpression(compiler, ret, NULL, NULL, &ret_op);
+  name->body.local->value.type = expression_GetClassOfOperation(ret_op);
   name->body.local->value.instances = list_create();
-  list_push(name->body.local->value.instances, class_CreateInstance(name->body.local->value.type));
 
-  // Init expression
-  name->body.local->init_expression = NULL;
-  if (token.type == TOKEN_Assign) {
-    match(ret->scope, TOKEN_Assign);
+  //s_class_instance *instance = __core_exe_expression(EXE_SCOPE(NULL, NULL, name->body.local->init_expression));
+  //list_push(name->body.local->value.instances, instance);
 
-    name->body.local->init_expression = compile_Expression(compiler, ret);
-  }
   if (ret->body.local_def->symbol->body.local->init_expression == NULL) CERROR(compiler, "compile_LocalFieldDefinition", "Field must have an initiliazation value.");
 
   // Push to temporaries list in parent statement (used for garbage collection)
@@ -2007,15 +2031,17 @@ e_statementend __core_local_def(s_exe_scope exe) {
 
   s_list *instances = exe.statement->body.local_def->symbol->body.local->value.instances;
 
-  if (instances->selected_item == NULL) {
-    list_read_first(instances);
-  } else {
-    s_class_instance *ret = list_read_next(instances);
-    if (ret == NULL) {
-      ret = class_CreateInstance(exe.statement->body.local_def->symbol->body.local->value.type);
-      list_push(instances, ret);
-      list_read_last(instances);
-    }
+  s_class_instance *instance = NULL;
+
+  if (instances->selected_item == NULL)
+    instance = list_read_first(instances);
+  else
+    instance = list_read_next(instances);
+
+  if (instance == NULL) {
+    instance = __core_exe_expression(EXE_SCOPE(NULL, exe.self, exe.statement->body.local_def->symbol->body.local->init_expression));
+    list_push(instances, instance);
+    list_read_last(instances);
   }
 
   return STATEMENT_END_CONTINUE;
@@ -2512,7 +2538,7 @@ int main() {
 " UP Interpreter  v0.3 \n";
   printf("%s", intro);
 
-  char *srcFilename = "classworld.up";
+  char *srcFilename = "examples/ex1.up";
 
   fanalysis = fopen("analysis.txt", "w");
 

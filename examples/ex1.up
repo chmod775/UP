@@ -1,0 +1,98 @@
+Number {
+  Print() {
+    this.ToString().Print();
+  }
+}
+
+Actuator {
+  name : String("");
+
+	Print() {
+		this.name.Print();
+	}
+
+  () {}
+
+  Motor {
+		test : Number(123);
+
+//		list: List<Number>(1,2,3,4);
+//		dict:	Dictionary<String, List<Number>>();
+
+    maxRPM : Number(1500);
+
+    Pump {
+      flow : Number(1);
+
+      () {
+				this.flow = 555;
+			}
+
+      GetTotalFlow() : Number {
+        return = this.flow + 3.1415;
+      }
+//			GetTotalFlow(a : Number) : Number {
+//				return = this.flow + a;
+//			}
+			GetTotalFlow(b : Number, a : Number) : Number {
+				return = this.flow + b + a;
+			}
+    }
+
+    Positioner {
+      length : Number(2);
+    }
+  }
+}
+
+Actuator.EV {
+  monostable : Number(3);
+}
+
+pp : 123;
+
+t1 : Actuator.Motor.Pump();
+t2 : Actuator.Motor.Pump();
+
+t3 : this.t2;
+
+Prova() {
+	l1 : Number(1000);
+	l1.Print();
+}
+
+SuperProva(a : Number) : Actuator {
+	return => Actuator.Motor.Pump();
+}
+
+t99 : this.SuperProva(1);
+
+Main() {
+	l1 : Number(776);
+	l2 : this.t2;
+
+	l1.Print();
+
+	this.Prova();
+	this.Prova();
+	this.Prova();
+
+	this.pp.Print();
+  //@@t1;
+  
+	this.t1.flow = 123;
+	this.t2.flow = 999;
+	this.t3.flow = 775;
+
+//	t1 = t2;
+
+	l2.flow.Print();
+	this.t2.flow.Print();
+
+	this.t99.Print();
+
+	//this.t1.GetTotalFlow().Print();
+//  this.t1.GetTotalFlow(5).Print();
+
+//  "Hello world".Print();
+}

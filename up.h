@@ -304,7 +304,7 @@ typedef union {
   s_statementbody_return *_return;
   s_statementbody_field_def *field_def;
   s_statementbody_argument_def *argument_def;
-  s_statementbody_argument_def *local_def;
+  s_statementbody_local_def *local_def;
   s_statementbody_method_def *method_def;
   s_statementbody_class_def *class_def;
   s_statementbody_constructor_def *constructor_def;
@@ -501,7 +501,7 @@ s_expression_operation *expression_Emit(s_list *core_operations, e_expression_op
 
 s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, s_scope *scope, s_list *operations, int level);
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent);
-
+s_statement *compile_CustomExpression(s_compiler *compiler, s_statement *parent, s_list *before_operations, s_list *after_operations, s_expression_operation **ret_operation);
 
 
 /* ##### FIELD ##### */
@@ -539,6 +539,8 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
 s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent);
 
 s_method_def *method_FindOverload(s_symbol *method, s_list *args);
+
+bool method_CheckArgumentTypes(s_method_def *method, s_list *args);
 
 /* ##### CLASS ##### */
 struct _s_class_instance {
