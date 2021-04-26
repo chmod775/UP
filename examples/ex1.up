@@ -4,6 +4,43 @@ Number {
   }
 }
 
+/*
+Test {
+
+  TestA {}
+
+  TestB {}
+}
+
+Add<T : Test> {
+  test : T();
+  Compute() {}
+}
+*/
+/*
+AdvList<T> {
+  a : T();
+
+/*  
+  list : List<T>();
+  New() : T {
+  }
+*/  
+  Sort() {}
+
+  Sum() {}
+
+  GetAt(index : Number) : T {
+
+  }
+
+  GetIndex<A>(index : A) : T {
+
+  }
+
+}
+*/
+
 Actuator {
   name : String("");
 
@@ -49,7 +86,7 @@ Actuator.EV {
   monostable : Number(3);
 }
 
-pp : 123;
+pp : Number(123);
 
 t1 : Actuator.Motor.Pump();
 t2 : Actuator.Motor.Pump();
@@ -60,24 +97,26 @@ Prova() {
 	l1 : Number(1000);
 	l1.Print();
 }
-
+/*
 SuperProva(a : Number) : Actuator {
 	return => Actuator.Motor.Pump();
 }
 
 t99 : this.SuperProva(1);
-
+*/
 Main() {
 	l1 : Number(776);
 	l2 : this.t2;
+  l3 : l2;
 
-	l1.Print();
 
+
+/*
 	this.Prova();
 	this.Prova();
 	this.Prova();
-
 	this.pp.Print();
+*/
   //@@t1;
   
 	this.t1.flow = 123;
@@ -85,14 +124,16 @@ Main() {
 	this.t3.flow = 775;
 
 //	t1 = t2;
+  this.t3.flow.Print();
+  //this.t3 => this.t1;
+  this.t3.flow.Print();
 
-	l2.flow.Print();
+
+
+
+  "t1".Print();
+	this.t1.flow.Print();
+  "t2".Print();
 	this.t2.flow.Print();
 
-	this.t99.Print();
-
-	//this.t1.GetTotalFlow().Print();
-//  this.t1.GetTotalFlow(5).Print();
-
-//  "Hello world".Print();
 }

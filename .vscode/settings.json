@@ -4,6 +4,7 @@
     "type_traits": "c",
     "limits": "cpp",
     "*.tcc": "cpp",
-    "typeinfo": "cpp"
+    "typeinfo": "cpp",
+    "sstream": "c"
   }
 }

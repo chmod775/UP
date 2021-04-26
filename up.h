@@ -225,6 +225,7 @@ typedef enum {
   STATEMENT_METHOD_DEF,
   STATEMENT_CLASS_DEF,
   STATEMENT_CONSTRUCTOR_DEF,
+  STATEMENT_GENERIC_DEF,
   STATEMENT_EXPRESSION,
   STATEMENT_DEBUG_INFO,
   STATEMENT_DEBUG_BREAKPOINT
@@ -288,6 +289,11 @@ typedef struct {
 } s_statementbody_constructor_def;
 
 typedef struct {
+  s_symbol *symbol;
+  //s_statement *
+} s_statementbody_generic_def;
+
+typedef struct {
   s_list *operations; // <s_expression_operation>
 } s_statementbody_expression;
 
@@ -308,6 +314,7 @@ typedef union {
   s_statementbody_method_def *method_def;
   s_statementbody_class_def *class_def;
   s_statementbody_constructor_def *constructor_def;
+  s_statementbody_generic_def *generic_def;
   s_statementbody_expression *expression;
   s_statementbody_debug_def *debug;
 } u_statementbody;
@@ -329,7 +336,8 @@ typedef enum {
   SYMBOL_METHOD,
   SYMBOL_ARGUMENT,
   SYMBOL_LOCAL,
-  SYMBOL_CLASS
+  SYMBOL_CLASS,
+  SYMBOL_GENERIC
 } e_symboltype;
 
 const char *debug_symboltype[] = {
@@ -339,7 +347,8 @@ const char *debug_symboltype[] = {
   "METHOD",
   "ARGUMENT",
   "LOCAL",
-  "CLASS"
+  "CLASS",
+  "GENERIC"
 };
 
 typedef struct {
@@ -467,6 +476,9 @@ s_statement *statement_CreateBlock(s_statement *parent);
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent);
 s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
 
+/* ##### GENERIC STATEMENT ##### */
+s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent);
+
 /* ##### For STATEMENT ##### */
 
 
@@ -507,7 +519,7 @@ s_statement *compile_CustomExpression(s_compiler *compiler, s_statement *parent,
 /* ##### FIELD ##### */
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement);
 s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *parent);
-s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent);
+s_statement *compile_FieldDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent);
 s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *parent);
 
 /* ##### METHOD ##### */
@@ -535,7 +547,7 @@ struct _s_method_def {
 
 int method_ComputeHash(s_method_def *method);
 
-s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent);
+s_statement *compile_MethodDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent);
 s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent);
 
 s_method_def *method_FindOverload(s_symbol *method, s_list *args);
@@ -570,7 +582,7 @@ s_class_instance *class_CreateInstance(s_symbol *class);
 void *class_DeriveFrom(s_statement *dest, s_symbol *src);
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
-s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent);
+s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent);
 
 s_statement *compile_Debug(s_compiler *compiler, s_statement *parent);
 s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent);

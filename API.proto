@@ -1,0 +1,16 @@
+API
+  class
+    Create(name, [parentClassName])
+    CreateGeneric(name, generics, [parentClassName])
+    AddMethod(methodSymbol)
+    AddConstructor(methodSymbol)
+    AddField(fieldSymbol)
+
+  method // Name == NULL -> Create constructor
+    Create(name, return, args)
+    CreateGeneric(name, generics, return, args)
+  
+  field
+    Create(name, type)
+  
+  

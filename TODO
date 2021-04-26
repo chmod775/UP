@@ -5,26 +5,33 @@ v0.3
   + More informative error log
   + String class
   + Integrate real with Number class
-  - Use proper Assign for field initialization (otherwise it's like having a pointer to the literal instance)
-  [BUG]- Local field initialization not working
-  - List and Dictionary classes
-  - FOR statement
-  - SWITCH statement
-  - '=>' link operation (like pointers. Copy address and point to class instance. Useful for garbage collection)
+  [REMOVED]- Use proper Assign for field initialization (otherwise it's like having a pointer to the literal instance)
+    + Used direct field initialization like "test : Number(1)"
+  + Local field initialization not working
   OK - [BUG]- (this + "a").Print(); 
-  [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
+  OK - [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
+  + Basic class inheritance
+
+v0.35
   - Method arguments must be sa local field with initialized value from call argument
   - Garbage collection and reusable class instances in class_CreateInstance
     + Use a list in the global class with all the created instances. If list is not empty pull from that, otherwise create new instance
     + Always call constructor and fields initialization
-  - Full class inheritance
   - Method / Field override behaviour
+  - Generics in classes (like C#)
+  - Re-think return from methods (I like the idea to pre-allocate the return object, but require more 'fexibility'. Like istantiate object with different constructor or link another object)
 
 v0.4
+  - FOR statement
+  - SWITCH statement
+  - API definition
+  - '=>' link operation (like pointers. Copy address and point to class instance. Useful for garbage collection)
+  - List and Dictionary classes
   - Try / Catch
   - Reflections
   - Regex (using class ?)
   - JSON (using class ?)
+  - Advanced class inheritance with mixing (multiple parents)
 
 v?
   - JSON export / import for every object
@@ -32,4 +39,3 @@ v?
   - GIT like included features for "seamless" switch to changes in software (using above feature JSON dump/load)
   - Method failover (default return with generic exception)
   - Async methods
-  - Generics in classes (like C#)

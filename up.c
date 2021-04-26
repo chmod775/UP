@@ -1055,6 +1055,8 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       op = expression_MethodCall(operations, found_methodOverload);
     } else if (token.type == TOKEN_Link) {
       match(scope, TOKEN_Link);
+      CERROR(compiler, "expression_Step", "TOKEN_Link to be re-invented before use.");
+
       s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
 
       op = expression_Emit(operations, OP_Link);
@@ -1444,20 +1446,20 @@ void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
   }
 }
 
-s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) {
+s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_ClassDefinition");
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compiler_ClassDefinition", "Wrong statement for class definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compiler_ClassDefinition", "Wrong parent symbol.");
 
   s_statement *ret = NULL;
 
-  s_symbol *class_symbol = token.content.symbol;
+  s_symbol *class_symbol = symbol;
   s_symbol *parent_symbol = parent->parent == NULL ? NULL : parent->body.class_def->symbol; // Direct Inheritance
   s_scope *parent_scope = parent->scope;
 
   if ((class_symbol->type > SYMBOL_NOTDEFINED) && (class_symbol->type != SYMBOL_CLASS)) CERROR(compiler, "compiler_ClassDefinition", "Symbol already defined.");
 
-  match(parent->scope, TOKEN_Symbol);
+  //match(parent->scope, TOKEN_Symbol);
 
   while (token.type == TOKEN_Dot) {
     if (class_symbol->type != SYMBOL_CLASS) CERROR(compiler, "compiler_ClassDefinition", "Symbol not defined.");
@@ -1483,8 +1485,8 @@ s_statement *compile_ClassDefinition(s_compiler *compiler, s_statement *parent) 
   if (parent_symbol != NULL)
     class_DeriveFrom(ret, parent_symbol);
 
-//  s_method_def *assign_method = class_CreateMethod(class_symbol, "Assign", &object_Assign, class_symbol->name, 1, class_symbol->name);
-//  class_symbol->body.class->operator_methods[TOKEN_Assign - TOKEN_Assign] = assign_method;
+  //s_method_def *assign_method = class_CreateMethod(class_symbol, "Assign", &object_Assign, class_symbol->name, 1, class_symbol->name);
+  //class_symbol->body.class->operator_methods[TOKEN_Assign - TOKEN_Assign] = assign_method;
 
   match(ret->scope, '{');
 
@@ -1568,12 +1570,12 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
 }
 
 // name([arg0, arg1, ...]) [: <return type>] { <statements> }
-s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent) {
+s_statement *compile_MethodDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_MethodDefinition");
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong parent statement for method definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compile_MethodDefinition", "Wrong parent symbol.");
 
-  s_symbol *name = token.content.symbol;
+  s_symbol *name = symbol;
   if (!name->isUppercase) CERROR(compiler, "compile_MethodDefinition", "Method definition must start uppercase.");
 
   if ((name->type > SYMBOL_NOTDEFINED) && (name->type != SYMBOL_METHOD)) CERROR(compiler, "compile_MethodDefinition", "Symbol already defined.");
@@ -1584,7 +1586,7 @@ s_statement *compile_MethodDefinition(s_compiler *compiler, s_statement *parent)
   ret->body.method_def = NEW(s_statementbody_method_def);
   ret->body.method_def->symbol = name;
 
-  match(parent->scope, TOKEN_Symbol);
+  //match(parent->scope, TOKEN_Symbol);
 
   if (name->type == SYMBOL_NOTDEFINED) {
     name->type = SYMBOL_METHOD;
@@ -1755,16 +1757,16 @@ s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *paren
   return ret;
 }
 
-s_statement *compile_FieldDefinition(s_compiler *compiler, s_statement *parent) {
+s_statement *compile_FieldDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_FieldDefinition");
 
-  s_symbol *name = token.content.symbol;
+  s_symbol *name = symbol;
   if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldDefinition", "Symbol already defined.");
 
   s_statement *ret = statement_CreateInside(parent, STATEMENT_FIELD_DEF);
   ret->exe_cb = &__core_field_def;
 
-  match(ret->scope, TOKEN_Symbol);
+  //match(ret->scope, TOKEN_Symbol);
 
   ret->body.field_def = NEW(s_statementbody_field_def);
   ret->body.field_def->symbol = name;
@@ -1907,6 +1909,41 @@ s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
+	PANALYSIS("compile_GenericDefinition");
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_GENERIC_DEF);
+
+  match(parent->scope, TOKEN_Symbol);
+
+  match(ret->scope, TOKEN_Lt);
+
+  while (token.type == TOKEN_Symbol) {
+
+    match(ret->scope, TOKEN_Symbol);
+
+    if (token.type == ',')
+      match(ret->scope, ',');
+  }
+
+  match(ret->scope, TOKEN_Gt);
+
+  // TODO: WORKING, BUT UGLY. REDO IT.
+  int cnt = 1;
+
+  while (cnt > 0) {
+    while (token.type != '}') {
+      if (token.type == '{') cnt++;
+      match(ret->scope, token.type);
+    }
+    match(parent->scope, '}');
+    cnt--;
+  }
+
+  return ret;
+}
+
+
+
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_DefinitionStatement");
   // Definition statements types:
@@ -1921,22 +1958,28 @@ s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *pare
     // Empty statement
     match(parent->scope, ';');
   } else if (token.type == TOKEN_Symbol) {
-    if (token.content.symbol->isUppercase) { // Method or Class
-      s_token next_token = preview(parent->scope);
-      if (next_token.type == '(') {
+    s_symbol *symbol = token.content.symbol;
+    match(parent->scope, TOKEN_Symbol);
+
+    if (symbol->isUppercase) { // Method or Class
+      //s_token next_token = preview(parent->scope);
+      if (token.type == '(') {
         // Method definition
-        ret = compile_MethodDefinition(compiler, parent);
+        ret = compile_MethodDefinition(symbol, compiler, parent);
+      } else if (token.type == TOKEN_Lt) {
+        // Generic definition
+        ret = compile_GenericDefinition(symbol, compiler, parent);
       } else {
         // Class definition
-        ret = compile_ClassDefinition(compiler, parent);
+        ret = compile_ClassDefinition(symbol, compiler, parent);
       }
-    } else if (token.content.symbol->isFullcase) { // Constant property
+    } else if (symbol->isFullcase) { // Constant property
 
-    } else if (token.content.symbol->startsUnderscore) { // Private property
+    } else if (symbol->startsUnderscore) { // Private property
 
     } else {
       // Field definition
-      ret = compile_FieldDefinition(compiler, parent);
+      ret = compile_FieldDefinition(symbol, compiler, parent);
       match(parent->scope, ';');
     }
   } else if (token.type == '(') {
@@ -2250,7 +2293,15 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
 
       if (src->class != target->class) PERROR("__core_exe_expression", "Cast not allowed for link.");
 
-      target->data = src->data;
+      if (target->class->type == SYMBOL_FIELD) {
+        target->data = src->data;
+
+      } else if (target->class->type == SYMBOL_LOCAL) {
+
+      } else {
+        PERROR("__core_exe_expression", "Link to allowed for symbol type.");
+      }
+
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       // Pop return instance from stack (or create new one in case of constructor)
       s_class_instance *ret = NULL;
