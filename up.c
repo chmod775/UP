@@ -3,15 +3,16 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdarg.h>
+#include <time.h>
 
 #include "up.h"
 
-#define ANALYSIS
+//#define ANALYSIS
 
 FILE *fanalysis;
 
 #ifdef ANALYSIS
-#define PANALYSIS(A) fprintf(fanalysis, A "\n");
+#define PANALYSIS(A) fprintf(fanalysis, "[%d] " A "\n", clock());
 #else
 #define PANALYSIS 
 #endif
@@ -1036,7 +1037,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   } else if (token.type == ',') {
     return NULL;
   } else {
-    CERROR(compiler, "expression_Step", "Bad expression.");
+    CERROR(compiler, "expression_Step", "Bad expression. Token %d [%c] not found.", token.type, token.type);
     exit(-1);
   }
 
@@ -1840,13 +1841,39 @@ s_statement *compile_If(s_compiler *compiler, s_statement *parent) {
 s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_For");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_FOR);
+  ret->exe_cb = &__core_for;
+
+  match(ret->scope, TOKEN_For);
+
+  match(ret->scope, '(');
 
   ret->body._for = NEW(s_statementbody_for);
 
-  // Init statement
-  ret->body._for->check = compile_Expression(compiler, ret);
+  ret->body._for->init = NEW(s_list);
+  ret->body._for->step = NEW(s_list);
 
+  // Init statement
+  while (token.type != ';') {
+    s_statement *expr = compile_Expression(compiler, ret);
+    list_push(ret->body._for->init, expr);
+    if (token.type == ',')
+      match(ret->scope, ',');
+  }
   match(ret->scope, ';');
+
+  ret->body._for->check = compile_Expression(compiler, ret);
+  match(ret->scope, ';');
+
+  while (token.type != ')') {
+    s_statement *expr = compile_Expression(compiler, ret);
+    list_push(ret->body._for->step, expr);
+    if (token.type == ',')
+      match(ret->scope, ',');
+  }
+
+  match(ret->scope, ')');
+
+  ret->body._for->loop = compile_Statement(compiler, ret);
 
   return ret;
 }
@@ -2009,7 +2036,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   if (token.type == TOKEN_If) {
     ret = compile_If(compiler, parent);
   } else if (token.type == TOKEN_For) {
-
+    ret = compile_For(compiler, parent);
   } else if (token.type == TOKEN_Debug_Info) {
     ret = compile_Debug(compiler, parent);
   } else if (token.type == TOKEN_Debug_Breakpoint) {
@@ -2188,7 +2215,7 @@ e_statementend __core_breakpoint(s_exe_scope exe) {
 
 e_statementend __core_if(s_exe_scope exe) {
 	PANALYSIS("__core_if");
-  if (exe.statement->type != STATEMENT_IF) PERROR("__core_while", "Wrong statement type");
+  if (exe.statement->type != STATEMENT_IF) PERROR("__core_if", "Wrong statement type");
 
   s_statementbody_if *statement_body = exe.statement->body._if;
 
@@ -2200,6 +2227,42 @@ e_statementend __core_if(s_exe_scope exe) {
     if (statement_body->_false) {
       e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_false));
     }
+  }
+
+  return STATEMENT_END_CONTINUE;
+}
+
+e_statementend __core_for(s_exe_scope exe) {
+	PANALYSIS("__core_for");
+  if (exe.statement->type != STATEMENT_FOR) PERROR("__core_for", "Wrong statement type");
+
+  s_statementbody_for *statement_body = exe.statement->body._for;
+
+  // Init expressions
+  s_symbol *init_expr = list_read_first(statement_body->init);
+  while (init_expr != NULL) {
+    __core_exe_expression(SUB_EXE_SCOPE(exe, init_expr));
+    init_expr = list_read_next(statement_body->init);
+  }
+
+  // Check expression
+  s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
+
+  s_number *num_result = (s_number *)check_result->data;
+
+  while (num_result->content.integer) {
+    e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
+    if (ret != STATEMENT_END_CONTINUE)
+      break;
+
+    // Step expressions
+    s_symbol *step_expr = list_read_first(statement_body->step);
+    while (step_expr != NULL) {
+      __core_exe_expression(SUB_EXE_SCOPE(exe, step_expr));
+      step_expr = list_read_next(statement_body->step);
+    }
+
+    check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
   }
 
   return STATEMENT_END_CONTINUE;
@@ -2586,10 +2649,11 @@ int main() {
 " |    |  / |    |     \n"
 " |______/  |____|     \n"
 "                      \n"
-" UP Interpreter  v0.3 \n";
+" UP Interpreter  v0.35\n";
   printf("%s", intro);
 
-  char *srcFilename = "examples/ex1.up";
+  //char *srcFilename = "examples/ex1.up";
+  char *srcFilename = "test.up";
 
   fanalysis = fopen("analysis.txt", "w");
 

@@ -1,7 +1,38 @@
-c : Number = 0;
-Main() {
-  while (c < 10000000) {
-    a = a + 1;
+Number {
+  Print() {
+    this.ToString().Print();
   }
-  a.Print();
+}
+
+SayHello {
+  name : String("");
+
+  (abc:String) {
+    this.name = abc;
+  }
+
+  Say() {
+    ("Ciao " + this.name + "!").Print();
+  }
+
+  Assign(src: SayHello) {
+    this.name = src.name;
+  }
+
+}
+
+c : Number(0);
+Main() {
+  a: Number(0);
+  b: Number(0);
+  str: String("");
+  o: SayHello("    al");
+  for (a = 0; a < 100000; a = a + 1) {
+    o = SayHello(a.ToString());
+    b = b + 1.1;
+    str = str + a.ToString();
+    o.Say();
+  }
+  b.Print();
+  str.Print();
 }

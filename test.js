@@ -1,36 +1,19 @@
-class num {
-  constructor() {
-    this.val = 0;
+class Hello {
+  constructor(name) {
+    this.name = name;
   }
-
-  Inc(step) {
-    this.val = this.val + step;
-  }
-
-  Less(ref) {
-    return this.val < ref;
-  }
-
-  ToString() {
-    return this.val.toString();
+  Say() {
+    console.log('Ciao ' + this.name + '!');
   }
 }
 
-function test(cnt) {
-  if (cnt < 100)
-    test(cnt + 1);
+var cnt = 0;
+var str = '';
+for (var a = 0; a < 100000; a++) {
+  var o = new Hello(a.toString());
+  cnt += 1.1;
+  str = str + a.toString();
+  o.Say();
 }
-
-
-var i = new num();
-var t = 3.1415;
-var a = "world";
-var d = "Hello";
-
-while (t < 80000) {
-  t++;
-  test(0);
-  a = a + d + " " + t;
-}
-
-console.log(a);
+console.log(cnt);
+console.log(str);

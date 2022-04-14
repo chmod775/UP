@@ -249,9 +249,11 @@ typedef struct {
 } s_statementbody_if;
 
 typedef struct {
-  s_statement *init;
+  s_list *init; // <s_statement>
   s_statement *check;
-  s_statement *step;
+  s_list *step; // <s_statement>
+
+  s_statement *loop;
 } s_statementbody_for;
 
 typedef struct {
