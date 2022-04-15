@@ -1012,7 +1012,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
         // Emit method call
         op = expression_MethodCall(operations, found_overload);
-      } else if (symbol->type == SYMBOL_CLASS) { // Constructor call
+      } else if ((symbol->type == SYMBOL_CLASS) || (symbol->type == SYMBOL_GENERIC)) { // Constructor call
         // Search constructor overload
         s_method_def *found_constructor = list_read_first(symbol->body.class->constructors);
         while (found_constructor != NULL) {
@@ -1944,17 +1944,28 @@ s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+
 s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_GenericDefinition");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_GENERIC_DEF);
 
-  match(parent->scope, TOKEN_Symbol);
-
   match(ret->scope, TOKEN_Lt);
 
-  while (token.type == TOKEN_Symbol) {
+  s_list *generics = list_create();
+  while (token.type != TOKEN_Gt) {
+    s_symbol *name = token.content.symbol;
+    if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_ArgumentDefinition", "Symbol already defined.");
 
     match(ret->scope, TOKEN_Symbol);
+
+    match(ret->scope, ':');
+
+    name->body.generic = NEW(s_symbolbody_generic);
+    name->type = SYMBOL_GENERIC;
+
+    name->body.generic->type = compile_FieldType(compiler, ret);
+
+    list_push(generics, name);
 
     if (token.type == ',')
       match(ret->scope, ',');
@@ -1962,22 +1973,8 @@ s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s
 
   match(ret->scope, TOKEN_Gt);
 
-  // TODO: WORKING, BUT UGLY. REDO IT.
-  int cnt = 1;
-
-  while (cnt > 0) {
-    while (token.type != '}') {
-      if (token.type == '{') cnt++;
-      match(ret->scope, token.type);
-    }
-    match(parent->scope, '}');
-    cnt--;
-  }
-
   return ret;
 }
-
-
 
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent) {
 	PANALYSIS("compile_DefinitionStatement");
@@ -1986,6 +1983,7 @@ s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *pare
   // 2. method(...) : type { <statement> }
   // 3. class { <statement> }
   // 4. <empty statement>;
+  // 5. (...) { <statement> }
 
   s_statement *ret = NULL;
 
@@ -1997,13 +1995,15 @@ s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *pare
     match(parent->scope, TOKEN_Symbol);
 
     if (symbol->isUppercase) { // Method or Class
+      if (token.type == TOKEN_Lt) {
+        // Generic definition
+        ret = compile_GenericDefinition(symbol, compiler, parent);
+      }
+
       //s_token next_token = preview(parent->scope);
       if (token.type == '(') {
         // Method definition
         ret = compile_MethodDefinition(symbol, compiler, parent);
-      } else if (token.type == TOKEN_Lt) {
-        // Generic definition
-        ret = compile_GenericDefinition(symbol, compiler, parent);
       } else {
         // Class definition
         ret = compile_ClassDefinition(symbol, compiler, parent);
@@ -2537,6 +2537,7 @@ void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_inst
   s_number *num_self = (s_number *)self->data;
 
   s_string *str_ret = (s_string *)ret->data;
+  str_ret->content = NULL;
   string_resize(str_ret, 20);
 
   if (num_self->isDecimal)

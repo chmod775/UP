@@ -273,6 +273,7 @@ typedef struct {
 typedef struct {
   s_symbol *symbol;
   s_method_def *method;
+  s_list *generics; // <s_symbol>
 } s_statementbody_method_def;
 
 typedef struct {
@@ -285,6 +286,7 @@ typedef struct {
 
 typedef struct {
   s_symbol *symbol;
+  s_list *generics; // <s_symbol>
 } s_statementbody_class_def;
 
 typedef struct {
@@ -292,7 +294,7 @@ typedef struct {
 } s_statementbody_constructor_def;
 
 typedef struct {
-  s_symbol *symbol;
+  s_list *symbols; // <s_symbol>
   //s_statement *
 } s_statementbody_generic_def;
 
@@ -386,6 +388,10 @@ typedef struct {
   s_method_def *operator_methods[sizeof(token_operators) / sizeof(token_operators[0])];
 } s_symbolbody_class;
 
+typedef struct {
+  s_anytype *type;
+} s_symbolbody_generic;
+
 typedef union {
   s_symbolbody_keyword *keyword;
   s_symbolbody_field *field;
@@ -393,6 +399,7 @@ typedef union {
   s_symbolbody_argument *argument;
   s_symbolbody_local *local;
   s_symbolbody_class *class;
+  s_symbolbody_generic *generic;
 } u_symbolbody;
 
 typedef struct _s_symbol {

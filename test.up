@@ -4,6 +4,13 @@ Number {
   }
 }
 
+Generic<T : String> {
+  str: T("");
+
+
+
+}
+
 SayHello {
   name : String("");
 
@@ -21,6 +28,7 @@ SayHello {
 
 }
 
+
 c : Number(0);
 Main() {
   a: Number(0);
@@ -30,7 +38,7 @@ Main() {
   for (a = 0; a < 100000; a = a + 1) {
     //o = SayHello(a.ToString());
     b = b + 1.1;
-    str = str + a.ToString();
+    //str = str + a.ToString();
     //o.Say();
   }
   b.Print();
