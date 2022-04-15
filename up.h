@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdint.h>
 
 #ifndef UP
 #define UP
@@ -39,7 +40,7 @@ typedef struct _s_list_item {
 } s_list_item;
 
 typedef struct {
-  u_int64_t items_count;
+  uint64_t items_count;
   s_list_item *head_item;
   s_list_item *selected_item;
 } s_list;
@@ -47,7 +48,7 @@ typedef struct {
 s_list *list_create();
 //void list_destroy(s_list *l);
 
-//void *list_read_index(s_list *l, u_int64_t index);
+//void *list_read_index(s_list *l, uint64_t index);
 void *list_read_first(s_list *l);
 void *list_read_last(s_list *l);
 void *list_read_next(s_list *l);
@@ -82,8 +83,8 @@ void parlist_push(s_parlist *pl, void *value);
 #define define_stack(T) \
 typedef struct { \
   T *content; \
-  u_int64_t ptr; \
-  u_int64_t size; \
+  uint64_t ptr; \
+  uint64_t size; \
 } s_stack__##T; \
 s_stack__##T stack_create__##T(int size) { \
   s_stack__##T ret; \
@@ -108,8 +109,8 @@ T stack_pop__##T(s_stack__##T *s) { \
 #define define_stack(T, N) \
 typedef struct { \
   T *content; \
-  u_int64_t ptr; \
-  u_int64_t size; \
+  uint64_t ptr; \
+  uint64_t size; \
 } s_stack__##N; \
 s_stack__##N stack_create__##N(int size) { \
   s_stack__##N ret; \
@@ -190,7 +191,7 @@ typedef struct _s_symbol s_anytype;
 
 typedef struct {
   s_anytype *type;
-  u_int64_t data_index;
+  uint64_t data_index;
 } s_anyvalue_field;
 
 typedef struct {
@@ -624,17 +625,17 @@ s_class_instance *sdk_class_ExecuteMethod(s_class_instance *target, s_method_def
 typedef struct {
   bool isDecimal;
   union {
-    u_int64_t integer;
+    uint64_t integer;
     double decimal;
   } content;
 } s_number;
 
 typedef struct {
-  u_int32_t len;
+  uint32_t len;
   char *content;
 } s_string;
 
-void string_resize(s_string *str, u_int64_t size);
+void string_resize(s_string *str, uint64_t size);
 
 // Required lib classes
 s_symbol *LIB_NumberClass = NULL;

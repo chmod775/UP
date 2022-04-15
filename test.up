@@ -28,11 +28,11 @@ Main() {
   str: String("");
   o: SayHello("    al");
   for (a = 0; a < 100000; a = a + 1) {
-    o = SayHello(a.ToString());
+    //o = SayHello(a.ToString());
     b = b + 1.1;
     str = str + a.ToString();
-    o.Say();
+    //o.Say();
   }
   b.Print();
-  str.Print();
+  //str.Print();
 }

@@ -6,11 +6,11 @@
 #include <time.h>
 
 
-static u_int32_t First0Bit(u_int32_t i) {
+static uint32_t First0Bit(uint32_t i) {
   i=~i;
 
-  u_int32_t uCount;
-  u_int32_t u = (i&(-i))-1;
+  uint32_t uCount;
+  uint32_t u = (i&(-i))-1;
   uCount = u
   - ((u >> 1) & 033333333333)
   - ((u >> 2) & 011111111111);
@@ -19,14 +19,14 @@ static u_int32_t First0Bit(u_int32_t i) {
 }
 
 typedef struct {
-  u_int64_t a;
-  u_int64_t b;
+  uint64_t a;
+  uint64_t b;
   char c[13];
 } s_customobj_1;
 
 typedef struct _s_pool_chunk {
   struct _s_pool_chunk *next;
-  u_int32_t occupancy;
+  uint32_t occupancy;
   s_customobj_1 data[32];
 } s_pool_chunk;
 
@@ -51,7 +51,7 @@ static s_customobj_1 *pool_Alloc(s_pool_chunk *pool) {
   //}
 
   // Search last free index
-  u_int32_t free_idx = First0Bit(pool->occupancy);
+  uint32_t free_idx = First0Bit(pool->occupancy);
 
   // Set index as occupied
   //pool->occupancy |= 1 << free_idx;
@@ -73,7 +73,7 @@ typedef struct _s_list_item {
 } s_list_item;
 
 typedef struct {
-  u_int64_t items_count;
+  uint64_t items_count;
   s_list_item *head_item;
   s_list_item *selected_item;
 } s_list;
@@ -96,7 +96,7 @@ void list_destroy(s_list *l) {
   }
 }
 
-void *list_read_index(s_list *l, u_int64_t index);
+void *list_read_index(s_list *l, uint64_t index);
 
 void list_add(s_list *l, void *value);
 void *list_pull(s_list *l);

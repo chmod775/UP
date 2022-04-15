@@ -34,7 +34,7 @@ typedef struct _s_list_item {
 } s_list_item;
 
 typedef struct {
-  u_int64_t items_count;
+  uint64_t items_count;
   s_list_item *head_item;
   s_list_item *selected_item;
 } s_list;
@@ -179,8 +179,8 @@ typedef struct {
 } s_dict_key;
 
 typedef struct {
-  u_int64_t size;
-  u_int64_t count;
+  uint64_t size;
+  uint64_t count;
   s_dict_key *keys;
   s_list *values;
 } s_dict;
@@ -197,7 +197,7 @@ s_dict *dict_create() {
 }
 
 s_dict_key *dict_get_fast(s_dict *dict, char *key, int hash) {
-  u_int64_t idx = 0;
+  uint64_t idx = 0;
   for (idx = 0; idx < dict->count; idx++) {
     s_dict_key *key_ptr = &dict->keys[idx];
     if (key_ptr->hash == hash) {
@@ -220,7 +220,7 @@ void dict_set(s_dict *dict, char *key, void *value) {
   
   if (found_key == NULL) {
     if (dict->count >= dict->size) {
-      u_int64_t new_size = dict->size + DICT_CHUNK;
+      uint64_t new_size = dict->size + DICT_CHUNK;
       s_dict_key *new_keys = malloc(sizeof(s_dict_key) * new_size);
       memset(new_keys, 0, sizeof(s_dict_key) * new_size);
       memcpy(new_keys, dict->keys, dict->size * sizeof(s_dict_key));

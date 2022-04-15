@@ -4,8 +4,14 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#include <stdint.h>
 
 #include "up.h"
+
+#if defined(_MSC_VER)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
 
 //#define ANALYSIS
 
@@ -21,7 +27,7 @@ FILE *fanalysis;
 #define CERROR(C, A, B, ...) { printf("\033[0;31m[" A "] Error Line: %d - " B "\033[0m\n", (C->parser->line), ##__VA_ARGS__ ); exit(-1); }
 
 void *t_new = NULL;
-#define NEW(T) t_new = malloc(sizeof(T)); if (t_new == NULL) { PERROR("NEW(##T)", "Could not malloc"); exit(-1); }
+#define NEW(T) t_new = malloc(sizeof(T)); memset(t_new, 0, sizeof(T)); if (t_new == NULL) { PERROR("NEW(##T)", "Could not malloc"); exit(-1); }
 
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
 #define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
@@ -933,8 +939,10 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     string->data = NEW(s_string);
     s_string *str = (s_string *)string->data;
 
+	str->content = NULL;
+
     string_resize(str, strlen(token.content.string));
-    strcpy(str->content, token.content.string);
+    strcpy((char *)str->content, token.content.string);
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = string;
@@ -1167,7 +1175,7 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
   int hash = 1;
 
   s_method_def *newMethod = NEW(s_method_def);
-
+  newMethod->ret_type = NULL;
   newMethod->body.type = METHODBODY_CALLBACK;
   newMethod->body.content.callback = cb;
 
@@ -1278,7 +1286,7 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
   // Check already defined Method overload
   s_list *l = symbol_name->body.method->overloads;
   s_list_item *li = list_get_first(l);
-  u_int64_t idx;
+  uint64_t idx;
   for (idx = 0; idx < l->items_count; idx++) {
     s_method_def *m = li->payload;
 
@@ -1331,7 +1339,7 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 bool method_CheckArgumentTypes(s_method_def *method, s_list *args) {
   s_list_item *pos_MethodArg = list_get_first(method->arguments);
   s_list_item *pos_CallArg = list_get_first(args);
-  u_int64_t idx;
+  uint64_t idx;
   for (idx = 0; idx < args->items_count; idx++) {
     s_symbol *methodArg_symbol = pos_MethodArg->payload;
     pos_MethodArg = list_get_next(pos_MethodArg);
@@ -1414,7 +1422,7 @@ void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
 
   s_list *l = NULL;
   s_list_item *l_item = NULL;
-  u_int64_t idx;
+  uint64_t idx;
 
   s_symbol *class_symbol = dest->body.class_def->symbol;
 
@@ -1541,7 +1549,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
   // Check already defined Costructor overload
   s_list *l = parent->body.class_def->symbol->body.class->constructors;
   s_list_item *li = list_get_first(l);
-  u_int64_t idx;
+  uint64_t idx;
   for (idx = 0; idx < l->items_count; idx++) {
     s_method_def *m = li->payload;
 
@@ -1637,7 +1645,7 @@ s_statement *compile_MethodDefinition(s_symbol *symbol, s_compiler *compiler, s_
 
       s_list_item *pos_MethodArg = list_get_first(m->arguments);
       s_list_item *pos_CallArg = list_get_first(newMethod->arguments);
-      u_int64_t idx;
+      uint64_t idx;
       for (idx = 0; idx < newMethod->arguments->items_count; idx++) {
         s_symbol *methodArg_symbol = pos_MethodArg->payload;
         pos_MethodArg = list_get_next(pos_MethodArg);
@@ -1849,8 +1857,8 @@ s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
 
   ret->body._for = NEW(s_statementbody_for);
 
-  ret->body._for->init = NEW(s_list);
-  ret->body._for->step = NEW(s_list);
+  ret->body._for->init = list_create();
+  ret->body._for->step = list_create();
 
   // Init statement
   while (token.type != ';') {
@@ -2125,7 +2133,7 @@ e_statementend __core_expression(s_exe_scope exe) {
 
 e_statementend __core_exe_statement(s_exe_scope exe) {
 	PANALYSIS("__core_exe_statement");
-  u_int64_t pre_stack_ptr = stack.ptr;
+  uint64_t pre_stack_ptr = stack.ptr;
 
   e_statementend ret = STATEMENT_END_CONTINUE;
 
@@ -2134,7 +2142,7 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
       s_statementbody_block *statement_body = exe.statement->body.block;
       
       s_list_item *pos = list_get_first(statement_body->statements);
-      u_int64_t idx;
+      uint64_t idx;
       for (idx = 0; idx < statement_body->statements->items_count; idx++) {
         s_statement *sub_statement = pos->payload;
         pos = list_get_next(pos);
@@ -2293,7 +2301,7 @@ void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance
 	PANALYSIS("__exe_method");
   if (method->body.type == METHODBODY_STATEMENT) {
     // Map arguments value
-    u_int64_t arg_index = 0;
+    uint64_t arg_index = 0;
     s_symbol *arg = list_read_first(method->arguments);
     while (arg != NULL) {
       arg->body.argument->value.data = args[arg_index];
@@ -2321,10 +2329,10 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
 
   s_class_instance *args[32];
 
-  u_int64_t pre_stack_ptr = stack.ptr;
+  uint64_t pre_stack_ptr = stack.ptr;
 
   s_list_item *pos = list_get_first(operations);
-  u_int64_t idx = 0;
+  uint64_t idx = 0;
   for (idx = 0; idx < operations->items_count; idx++) {
     s_expression_operation *op = pos->payload;
     pos = list_get_next(pos);
@@ -2378,7 +2386,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       }
 
       // Pop arguments from stack
-      u_int64_t args_count = op->payload.method->arguments->items_count;
+      uint64_t args_count = op->payload.method->arguments->items_count;
       
       int64_t arg_idx;
       for (arg_idx = 0; arg_idx < args_count; arg_idx++) {
@@ -2537,9 +2545,9 @@ void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_inst
     sprintf(str_ret->content, "%ld", num_self->content.integer);
 }
 
-void string_resize(s_string *str, u_int64_t len) {
-  u_int32_t old_blocks = (str->len / 2048) + 1;
-  u_int32_t new_blocks = (len / 2048) + 1;
+void string_resize(s_string *str, uint64_t len) {
+  uint32_t old_blocks = (str->len / 2048) + 1;
+  uint32_t new_blocks = (len / 2048) + 1;
 
   str->len = len;
 
@@ -2579,7 +2587,7 @@ void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_in
   s_string *str_self = (s_string *)self->data;
   s_string *str_B = (s_string *)args[0]->data;
 
-  u_int64_t len = str_self->len + str_B->len;
+  uint64_t len = str_self->len + str_B->len;
 
   string_resize(str_ret, len);
   strcpy(str_ret->content, str_self->content);
@@ -2595,7 +2603,7 @@ void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   char tmp[32];
   int ret_len = sprintf(tmp, "%ld", args[0]->data) + 1;
 
-  u_int64_t len = str_self->len + ret_len;
+  uint64_t len = str_self->len + ret_len;
 
   string_resize(str_ret, len);
   strcpy(str_ret->content, str_self->content);
@@ -2663,21 +2671,6 @@ int main() {
   compiler_Execute(compiler);
 
   fclose(fanalysis);
-
-  return 0;
-
-  // Interactive CLI (dream)
-  char *line = NULL;
-  size_t len = 0;
-  ssize_t lineSize = 0;
-
-  while (1) {
-    lineSize = getline(&line, &len, stdin);
-    
-    compiler_ExecuteCLI(compiler, line);
-  }
-
-
 
   return 0;
 }

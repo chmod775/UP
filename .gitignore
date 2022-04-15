@@ -1,2 +1,4 @@
 *.exe
 analysis.txt
+Debug
+.vs
