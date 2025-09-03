@@ -11,6 +11,7 @@ v0.3
   OK - [BUG]- (this + "a").Print(); 
   OK - [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
   + Basic class inheritance
+  - [BUG]- Allow function arguments to have names equal to properties of the class
 
 v0.35
   - Method arguments must be sa local field with initialized value from call argument

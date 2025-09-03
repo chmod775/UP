@@ -5,6 +5,7 @@
     "limits": "cpp",
     "*.tcc": "cpp",
     "typeinfo": "cpp",
-    "sstream": "c"
+    "sstream": "c",
+    "stdbool.h": "c"
   }
 }

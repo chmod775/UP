@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
 
 #include "up.h"
+#include <sys/types.h>
 
 #define ANALYSIS
 
@@ -906,7 +908,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     new->isDecimal = false;
     new->content.integer = token.content.integer;
 
-    number->data = new;
+    number->data = (s_class_instance **)new;
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = number;
@@ -920,7 +922,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     new->isDecimal = true;
     new->content.decimal = token.content.decimal;
 
-    number->data = new;
+    number->data = (s_class_instance **)new;
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = number;
@@ -1143,7 +1145,7 @@ void class_InitEmpty(s_symbol *class_symbol, s_scope *scope) {
   class_symbol->body.class->fields = list_create();
   class_symbol->body.class->methods = list_create();
   class_symbol->body.class->constructors = list_create();
-  memset(class_symbol->body.class->operator_methods, NULL, sizeof(class_symbol->body.class->operator_methods));
+  memset(class_symbol->body.class->operator_methods, 0, sizeof(class_symbol->body.class->operator_methods));
 }
 
 s_symbol *class_Create(char *name, s_scope *scope) {
@@ -2009,7 +2011,9 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
   if (token.type == TOKEN_If) {
     ret = compile_If(compiler, parent);
   } else if (token.type == TOKEN_For) {
-
+    CERROR(compiler, "compile_Statement", "For not implemented");
+  } else if (token.type == TOKEN_Switch) {
+    CERROR(compiler, "compile_Statement", "Switch not implemented");
   } else if (token.type == TOKEN_Debug_Info) {
     ret = compile_Debug(compiler, parent);
   } else if (token.type == TOKEN_Debug_Breakpoint) {
@@ -2381,7 +2385,7 @@ void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_
   new->isDecimal = num_B->isDecimal;
   new->content = num_B->content;
 
-  self->data = new;
+  self->data = (s_class_instance **)new;
 }
 
 void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
@@ -2586,7 +2590,7 @@ int main() {
 " |    |  / |    |     \n"
 " |______/  |____|     \n"
 "                      \n"
-" UP Interpreter  v0.3 \n";
+" UP Interpreter  v0.35 \n";
   printf("%s", intro);
 
   char *srcFilename = "examples/ex1.up";

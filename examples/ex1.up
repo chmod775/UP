@@ -2,6 +2,9 @@ Number {
   Print() {
     this.ToString().Print();
   }
+  (str: String) {
+    this = 999;
+  }
 }
 
 /*
@@ -48,7 +51,16 @@ Actuator {
 		this.name.Print();
 	}
 
-  () {}
+  (nn : String) {
+    this.name = nn + "_Name";
+  }
+
+  Assign(act: Actuator) {
+    this.name = act.name;
+  }
+  Assign(num: Number) {
+    this.name = "Numb";
+  }
 
   Motor {
 		test : Number(123);
@@ -61,7 +73,9 @@ Actuator {
     Pump {
       flow : Number(1);
 
-      () {
+      (nn : String) {
+        //this = Actuator(nn + "_Pump");
+        this = Number(123); // Just insanity!
 				this.flow = 555;
 			}
 
@@ -88,8 +102,8 @@ Actuator.EV {
 
 pp : Number(123);
 
-t1 : Actuator.Motor.Pump();
-t2 : Actuator.Motor.Pump();
+t1 : Actuator.Motor.Pump("test1");
+t2 : Actuator.Motor.Pump("test2");
 
 t3 : this.t2;
 
@@ -97,6 +111,7 @@ Prova() {
 	l1 : Number(1000);
 	l1.Print();
 }
+
 /*
 SuperProva(a : Number) : Actuator {
 	return => Actuator.Motor.Pump();
@@ -104,12 +119,16 @@ SuperProva(a : Number) : Actuator {
 
 t99 : this.SuperProva(1);
 */
+
 Main() {
 	l1 : Number(776);
 	l2 : this.t2;
-  l3 : l2;
+  l3 : l1; // Linking
 
+  //l4 : Number(345);
+  l4 : l3;
 
+  l5 : Number("345");
 
 /*
 	this.Prova();
@@ -128,12 +147,26 @@ Main() {
   //this.t3 => this.t1;
   this.t3.flow.Print();
 
-
-
+  l3 = 123;
+  @;
+  "l1".Print();
+  l1.Print();
+  "l3".Print();
+  l3.Print();
+  "l4".Print();
+  l4.Print();
+  "l5".Print();
+  l5.Print();
 
   "t1".Print();
 	this.t1.flow.Print();
+  this.t1.Print();
+
   "t2".Print();
 	this.t2.flow.Print();
+  this.t2.Print();
 
+  "t3".Print();
+	this.t3.flow.Print();
+  this.t3.Print();
 }
