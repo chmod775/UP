@@ -47,6 +47,17 @@ AdvList<T> {
 Actuator {
   name : String("");
 
+/*
+  // Setter
+  name(val: String) {
+
+  }
+  // Getter
+  name() {
+
+  }
+*/
+
 	Print() {
 		this.name.Print();
 	}
