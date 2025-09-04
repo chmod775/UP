@@ -423,13 +423,14 @@ char *scope_Print(s_scope *scope) {
 }
 
 /* ##### Parser ##### */
-s_parser *parse_Init(char *str) {
+s_parser *parse_Init(FILE *file) {
 	PANALYSIS("parse_Init");
   s_parser *ret = NEW(s_parser);
 
+  ret->file = file;
+  ret->file_ptr = 0;
+
   ret->line = 1;
-  ret->ptr = ret->source = str;
-  if (!ret->source) { PERROR("parse_Init", "Src is null"); return NULL; }
 
   return ret;
 }
@@ -437,42 +438,57 @@ s_parser *parse_Init(char *str) {
 int parse_Next(s_scope *scope, s_parser *parser) {
 	PANALYSIS("parse_Next");
   #define src parser->ptr
-  #define ret(TOKEN, CONTENT, CONTENTTYPE) { parser->token.content.CONTENTTYPE = (CONTENT); parser->token.type = (TOKEN); return (TOKEN); }
+
+  #define ret(TOKEN, CONTENT, CONTENTTYPE) { ungetc(ch, parser->file); parser->token.content.CONTENTTYPE = (CONTENT); parser->token.type = (TOKEN); return (TOKEN); }
 
   int token;                    // current token
-  char *last_pos;
   int hash;
 
   int64_t token_val_int;
   double token_val_decimal;
   char *token_val_string = NULL;
 
-  while (token = *src) {
-    ++src;
+
+  char ch = ' ';
+  ch = fgetc(parser->file); //ungetc(ch, parser->file);
+
+  #define src_advance  ch = fgetc(parser->file);
+
+  char t_buffer[256];
+
+  while ((token = ch) > 0) {
+    src_advance;
 
     // parse token here
     if (token == '\n') {
       ++parser->line;
+      if (parser->line == 28) {
+        char a = ch;
+      }
     }
     else if (token == '#') {
       // skip macro, because we will not support it
-      while (*src != 0 && *src != '\n') {
-        src++;
+      while (ch != 0 && ch != '\n') {
+        src_advance;
       }
     }
     else if ((token >= 'a' && token <= 'z') || (token >= 'A' && token <= 'Z') || (token == '_')) {
       // parse identifier
-      last_pos = src - 1;
       hash = token;
 
-      while ((*src >= 'a' && *src <= 'z') || (*src >= 'A' && *src <= 'Z') || (*src >= '0' && *src <= '9') || (*src == '_')) {
-        hash = hash * 147 + *src;
-        src++;
+      uint8_t t_buffer_ptr = 1;
+      t_buffer[0] = token;
+
+      while ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_')) {
+        hash = hash * 147 + ch;
+        t_buffer[t_buffer_ptr] = ch;
+        t_buffer_ptr++;
+        src_advance;        
       }
 
-      uint8_t name_size = src - last_pos;
+      uint8_t name_size = t_buffer_ptr;
       char *symbol_name = (char *)malloc(name_size + 1);
-      memcpy(symbol_name, last_pos, name_size);
+      memcpy(symbol_name, t_buffer, name_size);
       symbol_name[name_size] = 0x00;
 
       // Search for define symbol
@@ -480,7 +496,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
 
       while (symbol_ptr != NULL) {
         if (symbol_ptr->hash == hash) {
-          if (!memcmp(symbol_ptr->name, last_pos, symbol_ptr->length)) {
+          if (!memcmp(symbol_ptr->name, t_buffer, symbol_ptr->length)) {
             if (symbol_ptr->type == SYMBOL_KEYWORD) {
               ret(symbol_ptr->body.keyword->token, NULL, any);
             } else {
@@ -499,33 +515,35 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token >= '0' && token <= '9') {
       // parse number, three kinds: dec(123) hex(0x123) oct(017)
-      last_pos = src - 1;
       token_val_int = token - '0';
       if (token_val_int > 0) {
         // dec, starts with [1-9]
-        while ((*src >= '0' && *src <= '9') || (*src == '.')) {
-          if (*src == '.')
+        while ((ch >= '0' && ch <= '9') || (ch == '.')) {
+          if (ch == '.')
             break;
-          token_val_int = token_val_int*10 + *src++ - '0';
+          token_val_int = token_val_int*10 + (ch - '0');
+          src_advance;
         }
-        if (*src == '.') { // Float type contains a point
-          src = last_pos;
-          token_val_decimal = strtod(src, &src);
-          ret(TOKEN_Literal_Real, token_val_decimal, decimal);
+        if (ch == '.') { // Float type contains a point
+          PERROR("parse_Next", "Missing support for float literal");
+          // src = last_pos;
+          // token_val_decimal = strtod(src, &src);
+          // ret(TOKEN_Literal_Real, token_val_decimal, decimal);
         }
       } else {
         // starts with 0
-        if (*src == 'x' || *src == 'X') {
+        if (ch == 'x' || ch == 'X') {
           //hex
-          token = *++src;
+          token = src_advance;
           while ((token >= '0' && token <= '9') || (token >= 'a' && token <= 'f') || (token >= 'A' && token <= 'F')) {
             token_val_int = token_val_int * 16 + (token & 15) + (token >= 'A' ? 9 : 0);
-            token = *++src;
+            token = src_advance;
           }
         } else {
             // oct
-          while (*src >= '0' && *src <= '7') {
-            token_val_int = token_val_int*8 + *src++ - '0';
+          while (ch >= '0' && ch <= '7') {
+            token_val_int = token_val_int*8 + (ch - '0');
+            src_advance;
           }
         }
       }
@@ -538,12 +556,17 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       memset(token_val_string, 0, 128);
 
       char *token_val_string_ptr = token_val_string;
-      while (*src != 0 && *src != token) {
-        char ch = *src++;
-        if (ch == '\\') {
+      *token_val_string_ptr = ch;
+      token_val_string_ptr++;
+
+      while (ch != 0 && ch != token) {
+        char tch = src_advance;
+        if (ch == 0 || ch == token) break;
+
+        if (tch == '\\') {
           // escape character
-          ch = *src++;
-          if (ch == 'n') {
+          tch = src_advance;
+          if (tch == 'n') {
             ch = '\n';
           }
         }
@@ -552,22 +575,24 @@ int parse_Next(s_scope *scope, s_parser *parser) {
         token_val_string_ptr++;
       }
 
-      src++;
+      src_advance;
 
       ret(TOKEN_Literal_String, token_val_string, string);
     }
     else if (token == '/') {
-      if (*src == '/') {
+      if (ch == '/') {
         // skip comments
-        while (*src != 0 && *src != '\n') {
-          ++src;
+        while (ch != 0 && ch != '\n') {
+          src_advance;
         }
-      } else if (*src == '*') {
+      } else if (ch == '*') {
         // Block comment
         int _token = 0;
         do {
           _token = parse_Next(scope, parser);
         } while (_token != TOKEN_CommentBlock_End);
+        ch = fgetc(parser->file); ungetc(ch, parser->file);
+        char a = ch;
       } else {
         // divide operator
         ret(TOKEN_Div, NULL, any);
@@ -575,11 +600,11 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '=') {
       // parse '==', '=' or '=>'
-      if (*src == '=') {
-        src ++;
+      if (ch == '=') {
+        src_advance;
         ret(TOKEN_Eq, NULL, any);
-      } else if (*src == '>') {
-        src ++;
+      } else if (ch == '>') {
+        src_advance;
         ret(TOKEN_Link, NULL, any);
       } else {
         ret(TOKEN_Assign, NULL, any);
@@ -587,8 +612,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '+') {
       // parse '+' and '++'
-      if (*src == '+') {
-        src++;
+      if (ch == '+') {
+        src_advance;
         ret(TOKEN_Inc, NULL, any);
       } else {
         ret(TOKEN_Add, NULL, any);
@@ -596,8 +621,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '-') {
       // parse '-' and '--'
-      if (*src == '-') {
-        src ++;
+      if (ch == '-') {
+        src_advance;
         ret(TOKEN_Dec, NULL, any);
       } else {
         ret(TOKEN_Sub, NULL, any);
@@ -605,8 +630,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '!') {
       // parse '!='
-      if (*src == '=') {
-        src++;
+      if (ch == '=') {
+        src_advance;
         ret(TOKEN_Ne, NULL, any);
       } else {
         ret(token, NULL, any);
@@ -614,11 +639,11 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '<') {
       // parse '<=', '<<' or '<'
-      if (*src == '=') {
-        src ++;
+      if (ch == '=') {
+        src_advance;
         ret(TOKEN_Le, NULL, any);
-      } else if (*src == '<') {
-        src ++;
+      } else if (ch == '<') {
+        src_advance;
         ret(TOKEN_Shl, NULL, any);
       } else {
         ret(TOKEN_Lt, NULL, any);
@@ -626,11 +651,11 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '>') {
       // parse '>=', '>>' or '>'
-      if (*src == '=') {
-        src ++;
+      if (ch == '=') {
+        src_advance;
         ret(TOKEN_Ge, NULL, any);
-      } else if (*src == '>') {
-        src ++;
+      } else if (ch == '>') {
+        src_advance;
         ret(TOKEN_Shr, NULL, any);
       } else {
         ret(TOKEN_Gt, NULL, any);
@@ -638,8 +663,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '|') {
       // parse '|' or '||'
-      if (*src == '|') {
-        src ++;
+      if (ch == '|') {
+        src_advance;
         ret(TOKEN_Lor, NULL, any);
       } else {
         ret(TOKEN_Or, NULL, any);
@@ -647,8 +672,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '&') {
       // parse '&' and '&&'
-      if (*src == '&') {
-        src ++;
+      if (ch == '&') {
+        src_advance;
         ret(TOKEN_Lan, NULL, any);
       } else {
         ret(TOKEN_And, NULL, any);
@@ -661,8 +686,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       ret(TOKEN_Mod, NULL, any);
     }
     else if (token == '*') {
-      if (*src == '/') {
-        src ++;
+      if (ch == '/') {
+        src_advance;
         ret(TOKEN_CommentBlock_End, NULL, any);
       } else {
         ret(TOKEN_Mul, NULL, any);
@@ -675,16 +700,16 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       ret(TOKEN_Dot, NULL, any);
     }
     else if (token == ':') {
-      if (*src == ':') {
-        src ++;
+      if (ch == ':') {
+        src_advance;
         ret(TOKEN_DirectChildren, NULL, any);
       } else {
         ret(token, NULL, any);
       }
     }
     else if (token == '@') {
-      if (*src == '@') {
-        src ++;
+      if (ch == '@') {
+        src_advance;
         ret(TOKEN_Debug_Info, NULL, any);
       } else {
         ret(TOKEN_Debug_Breakpoint, NULL, any);
@@ -716,8 +741,12 @@ int parse_Match(s_scope *scope, s_parser *parser, int token) {
 
 s_token parse_Preview(s_scope *scope, s_parser *parser) {
 	PANALYSIS("parse_Preview");
+  uint32_t f_pos = ftell(parser->file);
+  
   s_parser _parser = *parser;
   parse_Next(scope, &_parser);
+
+  fseek(parser->file, f_pos, SEEK_SET);
   return _parser.token;
 }
 
@@ -794,7 +823,7 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
 }
 
 /* ##### Compiler ##### */
-s_compiler *compiler_Init(char *content) {
+s_compiler *compiler_Init(FILE *file) {
 	PANALYSIS("compiler_Init");
   s_compiler *ret = NEW(s_compiler);
 
@@ -804,7 +833,7 @@ s_compiler *compiler_Init(char *content) {
   ret->rootStatement = statement_CreateRoot(ret);
   if (!ret->rootStatement) { PERROR("compiler_Init", "Could not create root class statement"); return NULL; }
 
-  ret->parser = parse_Init(content);
+  ret->parser = parse_Init(file);
   if (!ret->parser) { PERROR("compiler_Init", "Could not initialize root parser"); return NULL; }
 
   stack = stack_create__s_class_instance_ptr(256);
@@ -814,25 +843,15 @@ s_compiler *compiler_Init(char *content) {
 
 s_compiler *compiler_InitFromFile(char *filename) {
 	PANALYSIS("compiler_InitFromFile");
-  const int sizeLimit = 256 * 1024; // arbitrary size
 
-  // Open source file
   FILE *fd = openFile(filename);
   if (!fd) { PERROR("compiler_InitFromFile", "Error opening file"); return NULL; }
 
-  // Malloc source code area
-  char *content = (char *)malloc(sizeLimit * sizeof(char));
-  if (!content) { PERROR("compiler_InitFromFile", "Could not malloc source code area"); return NULL; }
+  s_compiler *ret = compiler_Init(fd);
 
-  // Read the source file
-  int l;
-  if ((l = fread(content, 1, sizeLimit-1, fd)) <= 0) { PERROR("compiler_InitFromFile", "fread() returned %d", l); return NULL; }
-  content[l] = 0; // add EOF character
+  // closeFile(fd);
 
-  // Close file
-  closeFile(fd);
-
-  return compiler_Init(content);
+  return ret;
 }
 
 void compiler_Execute(s_compiler *compiler) {
@@ -852,11 +871,11 @@ void compiler_Execute(s_compiler *compiler) {
 
 void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
 	PANALYSIS("compiler_ExecuteCLI");
-  compiler->parser = parse_Init(code);
+  // compiler->parser = parse_Init(code);
 
-  parse_Next(compiler->rootStatement->scope, compiler->parser);
+  // parse_Next(compiler->rootStatement->scope, compiler->parser);
 
-  compile_Statement(compiler, compiler->rootStatement, true);
+  // compile_Statement(compiler, compiler->rootStatement, true);
 }
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type) {
@@ -2837,6 +2856,7 @@ int main(int argc, char **argv) {
   if (argc < 2) PERROR("main", "Source file not defined!");
 
   char *srcFilename = argv[1];
+  printf("Opened file: \"%s\"\n", srcFilename);
 
   fanalysis = fopen("analysis.txt", "w");
 

@@ -453,13 +453,14 @@ typedef struct {
 } s_token;
 
 typedef struct {
-  char *source;
-  char *ptr;
+  FILE *file;
+  uint32_t file_ptr;
+
   int line;
   s_token token;
 } s_parser;
 
-s_parser *parse_Init(char *str);
+s_parser *parse_Init(FILE *file);
 
 int parse_Next(s_scope *scope, s_parser *parser);
 
@@ -475,7 +476,7 @@ typedef struct {
   s_statement *rootStatement;
 } s_compiler;
 
-s_compiler *compiler_Init(char *content);
+s_compiler *compiler_Init(FILE *file);
 void compiler_Next(s_compiler *compiler);
 
 

@@ -9,7 +9,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${fileDirname}/${fileBasenameNoExtension}.exe",
-      "args": [],
+      "args": [ "/home/chmod775/source/repos/UP/examples/ex0.up" ],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],

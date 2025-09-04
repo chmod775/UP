@@ -91,7 +91,7 @@ Actuator {
 			}
 
       GetTotalFlow() : Number {
-        return = this.flow + 3.1415;
+        return = this.flow + 3;//.1415;
       }
 //			GetTotalFlow(a : Number) : Number {
 //				return = this.flow + a;
