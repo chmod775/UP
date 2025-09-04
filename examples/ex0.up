@@ -39,4 +39,14 @@ Main() {
   a.foo.Print();
   n : Number(776);
   n.Print();
+
+  i : Number(0);
+  i++;
+  i--;
+  i.Print();
+
+  for (i = 10; i > 0; i-- ) {
+    i.Print();
+  }
+  
 }

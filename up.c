@@ -1090,10 +1090,11 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       s_token_operator token_operator = token_operators[token.type - TOKEN_Assign];
       match(scope, token.type);
 
-      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, token_operator.sub_token);
-
-      s_list *args = list_create();
-      list_push(args, op_arg);
+      s_list* args = list_create();
+      for (uint8_t i = 0; i < token_operator.args_count; i++) {
+          s_expression_operation* op_arg = expression_Step(compiler, statement, scope, operations, token_operator.sub_token);
+          list_push(args, op_arg);
+      }
 
       s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
       op = expression_MethodCall(operations, found_methodOverload);
@@ -2316,6 +2317,7 @@ e_statementend __core_for(s_exe_scope exe) {
     }
 
     check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
+    num_result = (s_number*)check_result->data;
   }
 
   return STATEMENT_END_CONTINUE;
@@ -2555,6 +2557,22 @@ void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   s_number *num_self = (s_number *)self->data;
   s_number *num_ret = (s_number *)ret->data;
 
+  bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
+  bool allDecimal = num_self->isDecimal && num_B->isDecimal;
+
+  num_ret->isDecimal = anyDecimal;
+
+  if (!num_ret->isDecimal) {
+      num_ret->content.integer = num_self->content.integer - num_B->content.integer;
+  }
+  else if (allDecimal) {
+      num_ret->content.decimal = num_self->content.decimal - num_B->content.decimal;
+  }
+  else {
+      double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
+      double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
+      num_ret->content.decimal = dec_self - dec_B;
+  }
 }
 
 void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
@@ -2563,6 +2581,22 @@ void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   s_number *num_self = (s_number *)self->data;
   s_number *num_ret = (s_number *)ret->data;
 
+  bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
+  bool allDecimal = num_self->isDecimal && num_B->isDecimal;
+
+  num_ret->isDecimal = anyDecimal;
+
+  if (!num_ret->isDecimal) {
+      num_ret->content.integer = num_self->content.integer * num_B->content.integer;
+  }
+  else if (allDecimal) {
+      num_ret->content.decimal = num_self->content.decimal * num_B->content.decimal;
+  }
+  else {
+      double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
+      double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
+      num_ret->content.decimal = dec_self * dec_B;
+  }
 }
 
 void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
@@ -2582,6 +2616,26 @@ void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_i
     double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
     num_ret->content.decimal = dec_self < dec_B;
   }
+}
+
+void number_Gt_Number(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+    PANALYSIS("number_Gt_Number");
+    s_number* num_B = (s_number*)args[0]->data;
+    s_number* num_self = (s_number*)self->data;
+    s_number* num_ret = (s_number*)ret->data;
+
+    bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
+
+    num_ret->isDecimal = false;
+
+    if (!anyDecimal) {
+        num_ret->content.integer = num_self->content.integer > num_B->content.integer;
+    }
+    else {
+        double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
+        double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
+        num_ret->content.decimal = dec_self > dec_B;
+    }
 }
 
 void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
@@ -2615,6 +2669,34 @@ void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_inst
     sprintf(str_ret->content, "%lf", num_self->content.decimal);
   else
     sprintf(str_ret->content, "%ld", num_self->content.integer);
+}
+
+void number_Inc(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+    PANALYSIS("number_Inc");
+    s_number* num_self = (s_number*)self->data;
+
+    s_string* str_ret = (s_string*)ret->data;
+    str_ret->content = NULL;
+    string_resize(str_ret, 20);
+
+    if (num_self->isDecimal)
+        num_self->content.decimal++;
+    else
+        num_self->content.integer++;
+}
+
+void number_Dec(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+    PANALYSIS("number_Dec");
+    s_number* num_self = (s_number*)self->data;
+
+    s_string* str_ret = (s_string*)ret->data;
+    str_ret->content = NULL;
+    string_resize(str_ret, 20);
+
+    if (num_self->isDecimal)
+        num_self->content.decimal--;
+    else
+        num_self->content.integer--;
 }
 
 void string_resize(s_string *str, uint64_t len) {
@@ -2705,9 +2787,12 @@ void stdlib_Init(s_compiler *compiler) {
   class_CreateMethod(LIB_NumberClass, "Add", &number_Add_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Sub", &number_Sub_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Less", &number_Less_Number, "Number", 1, "Number");
+  class_CreateMethod(LIB_NumberClass, "Gt", &number_Gt_Number, "Number", 1, "Number");
   class_CreateMethod(LIB_NumberClass, "Assign", &number_Assign_Number, "Number", 1, "Number");
   //class_CreateMethod(LIB_NumberClass, "Print", &number_Print, NULL, 0);
   class_CreateMethod(LIB_NumberClass, "ToString", &number_ToString, "String", 0);
+  class_CreateMethod(LIB_NumberClass, "Inc", &number_Inc, "Number", 0);
+  class_CreateMethod(LIB_NumberClass, "Dec", &number_Dec, "Number", 0);
 
   /* ##### String class ##### */
   class_CreateConstructor(LIB_StringClass, &string_Constructor, 0);
@@ -2736,7 +2821,7 @@ int main() {
   printf("%s", intro);
 
   //char *srcFilename = "examples/ex1.up";
-  char *srcFilename = "examples/ex1.up";
+  char *srcFilename = "examples/ex0.up";
 
   fanalysis = fopen("analysis.txt", "w");
 

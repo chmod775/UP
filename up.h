@@ -152,31 +152,33 @@ typedef enum {
 typedef struct {
   char *method_name;
   e_token sub_token;
+  uint8_t args_count;
 } s_token_operator;
 
 s_token_operator token_operators[] = {
-  { .method_name = "Assign", .sub_token = TOKEN_Assign },
-  { .method_name = "Cond", .sub_token = TOKEN_Cond },
-  { .method_name = "Lor", .sub_token = TOKEN_Lan },
-  { .method_name = "Lan", .sub_token = TOKEN_Or },
-  { .method_name = "Or", .sub_token = TOKEN_Xor },
-  { .method_name = "Xor", .sub_token = TOKEN_And },
-  { .method_name = "And", .sub_token = TOKEN_Eq },
-  { .method_name = "Eq", .sub_token = TOKEN_Ne },
-  { .method_name = "Ne", .sub_token = TOKEN_Lt },
-  { .method_name = "Less", .sub_token = TOKEN_Shl },
-  { .method_name = "Gt", .sub_token = TOKEN_Shl },
-  { .method_name = "Le", .sub_token = TOKEN_Shl },
-  { .method_name = "Ge", .sub_token = TOKEN_Shl },
-  { .method_name = "Shl", .sub_token = TOKEN_Add },
-  { .method_name = "Shr", .sub_token = TOKEN_Add },
-  { .method_name = "Add", .sub_token = TOKEN_Mul },
-  { .method_name = "Sub", .sub_token = TOKEN_Mul },
-  { .method_name = "Mul", .sub_token = TOKEN_Inc },
-  { .method_name = "Div", .sub_token = TOKEN_Inc },
-  { .method_name = "Mod", .sub_token = TOKEN_Inc },
-  { .method_name = "Inc", .sub_token = TOKEN_Inc },
-  { .method_name = "Dec", .sub_token = TOKEN_Dec }
+  {.method_name = "Assign",     .args_count = 1, .sub_token = TOKEN_Assign },    // TOKEN_Assign
+  {.method_name = "Cond",       .args_count = 1,   .sub_token = TOKEN_Cond },      // TOKEN_Cond
+  {.method_name = "Lor",        .args_count = 1,    .sub_token = TOKEN_Lan },       // TOKEN_Lor
+  {.method_name = "Lan",        .args_count = 1,    .sub_token = TOKEN_Or },        // TOKEN_Lan
+  {.method_name = "Or",         .args_count = 1,     .sub_token = TOKEN_Xor },       // TOKEN_Or
+  {.method_name = "Xor",        .args_count = 1,    .sub_token = TOKEN_And },       // TOKEN_Xor
+  {.method_name = "And",        .args_count = 1,    .sub_token = TOKEN_Eq },        // TOKEN_And
+  {.method_name = "Eq",         .args_count = 1,     .sub_token = TOKEN_Ne },        // TOKEN_Eq
+  {.method_name = "Ne",         .args_count = 1,     .sub_token = TOKEN_Lt },        // TOKEN_Ne
+  {.method_name = "Less",       .args_count = 1,   .sub_token = TOKEN_Shl },       // TOKEN_Lt
+  {.method_name = "Gt",         .args_count = 1,     .sub_token = TOKEN_Shl },       // TOKEN_Gt
+  {.method_name = "Le",         .args_count = 1,     .sub_token = TOKEN_Shl },       // TOKEN_Le
+  {.method_name = "Ge",         .args_count = 1,     .sub_token = TOKEN_Shl },       // TOKEN_Ge
+  {.method_name = "Shl",        .args_count = 1,    .sub_token = TOKEN_Add },       // TOKEN_Shl
+  {.method_name = "Shr",        .args_count = 1,    .sub_token = TOKEN_Add },       // TOKEN_Shr
+  {.method_name = "Add",        .args_count = 1,    .sub_token = TOKEN_Mul },       // TOKEN_Add
+  {.method_name = "Sub",        .args_count = 1,    .sub_token = TOKEN_Mul },       // TOKEN_Sub
+  {.method_name = "Mul",        .args_count = 1,    .sub_token = TOKEN_Inc },       // TOKEN_Mul
+  {.method_name = "Div",        .args_count = 1,    .sub_token = TOKEN_Inc },       // TOKEN_Div
+  {.method_name = "Mod",        .args_count = 1,    .sub_token = TOKEN_Inc },       // TOKEN_Mod
+
+  {.method_name = "Inc",        .args_count = 0,    .sub_token = TOKEN_Inc },       // TOKEN_Inc
+  {.method_name = "Dec",        .args_count = 0,    .sub_token = TOKEN_Dec }        // TOKEN_Dec
 };
 
 /* ##### Types ##### */
