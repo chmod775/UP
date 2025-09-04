@@ -2,3 +2,5 @@
 analysis.txt
 Debug
 .vs
+massif.*
+a.out

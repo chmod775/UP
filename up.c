@@ -470,6 +470,11 @@ int parse_Next(s_scope *scope, s_parser *parser) {
         src++;
       }
 
+      uint8_t name_size = src - last_pos;
+      char *symbol_name = (char *)malloc(name_size + 1);
+      memcpy(symbol_name, last_pos, name_size);
+      symbol_name[name_size] = 0x00;
+
       // Search for define symbol
       s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
 
@@ -487,7 +492,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       }
 
       // No symbol found, create one
-      s_symbol *new_symbol = symbol_Create(last_pos, SYMBOL_NOTDEFINED, src - last_pos);
+      s_symbol *new_symbol = symbol_Create(symbol_name, SYMBOL_NOTDEFINED, name_size);
       scope_AddSymbol(scope, new_symbol);
 
       ret(TOKEN_Symbol, new_symbol, symbol);
@@ -923,7 +928,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     new->isDecimal = false;
     new->content.integer = token.content.integer;
 
-    number->data = new;
+    number->data.payload = new;
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = number;
@@ -937,7 +942,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     new->isDecimal = true;
     new->content.decimal = token.content.decimal;
 
-    number->data = new;
+    number->data.payload = new;
 
     op = expression_Emit(operations, OP_UseTemporaryInstance);
     op->payload.temporary = number;
@@ -946,8 +951,8 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   } else if (token.type == TOKEN_Literal_String) {
     s_class_instance *string = class_CreateInstance(LIB_StringClass);
 
-    string->data = NEW(s_string);
-    s_string *str = (s_string *)string->data;
+    string->data.payload = NEW(s_string);
+    s_string *str = (s_string *)string->data.payload;
 
 	str->content = NULL;
 
@@ -1191,7 +1196,7 @@ void class_InitEmpty(s_symbol *class_symbol, s_scope *scope) {
   class_symbol->body.class->fields = list_create();
   class_symbol->body.class->methods = list_create();
   class_symbol->body.class->constructors = list_create();
-  memset(class_symbol->body.class->operator_methods, NULL, sizeof(class_symbol->body.class->operator_methods));
+  memset(class_symbol->body.class->operator_methods, 0, sizeof(class_symbol->body.class->operator_methods));
 }
 
 s_symbol *class_Create(char *name, s_scope *scope) {
@@ -1360,9 +1365,9 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 
   // Allocate data space
   if (instance->class->body.class->fields->items_count > 0)
-    instance->data = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
+    instance->data.fields = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
   else
-    instance->data = NULL;
+    instance->data.fields = NULL;
 
   // Initialize fields
   uint64_t field_index = 0;
@@ -1372,7 +1377,7 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 
     if (init_value->class != field_symbol->body.field->value.type) PERROR("class_CreateInstance", "Wrong instance for field \"%s\" initialization. Expected \"%s\", given \"%s\"", symbol_GetCleanName(field_symbol), symbol_GetCleanName(field_symbol->body.field->value.type), symbol_GetCleanName(init_value->class));
 
-    instance->data[field_index] = init_value;
+    instance->data.fields[field_index] = init_value;
 
     field_symbol = list_read_next(instance->class->body.class->fields);
     field_index++;
@@ -2284,7 +2289,7 @@ e_statementend __core_if(s_exe_scope exe) {
 
   s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
 
-  if (check_result->data) {
+  if (check_result->data.payload) {
     e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_true));
   } else {
     if (statement_body->_false) {
@@ -2302,7 +2307,7 @@ e_statementend __core_for(s_exe_scope exe) {
   s_statementbody_for *statement_body = exe.statement->body._for;
 
   // Init expressions
-  s_symbol *init_expr = list_read_first(statement_body->init);
+  s_statement *init_expr = list_read_first(statement_body->init);
   while (init_expr != NULL) {
       __core_exe_statement(SUB_EXE_SCOPE(exe, init_expr));
     init_expr = list_read_next(statement_body->init);
@@ -2311,7 +2316,7 @@ e_statementend __core_for(s_exe_scope exe) {
   // Check expression
   s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
 
-  s_number *num_result = (s_number *)check_result->data;
+  s_number *num_result = (s_number *)check_result->data.payload;
 
   while (num_result->content.integer) {
     e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
@@ -2319,14 +2324,14 @@ e_statementend __core_for(s_exe_scope exe) {
       break;
 
     // Step expressions
-    s_symbol *step_expr = list_read_first(statement_body->step);
+    s_statement *step_expr = list_read_first(statement_body->step);
     while (step_expr != NULL) {
       __core_exe_statement(SUB_EXE_SCOPE(exe, step_expr));
       step_expr = list_read_next(statement_body->step);
     }
 
     check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
-    num_result = (s_number*)check_result->data;
+    num_result = (s_number*)check_result->data.payload;
   }
 
   return STATEMENT_END_CONTINUE;
@@ -2340,7 +2345,7 @@ e_statementend __core_while(s_exe_scope exe) {
 
   s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
 
-  s_number *num_result = (s_number *)check_result->data;
+  s_number *num_result = (s_number *)check_result->data.payload;
 
   while (num_result->content.integer) {
     e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
@@ -2384,7 +2389,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
   s_list *operations = exe.statement->body.expression->operations;
 
   s_class_instance *args[32];
-  memset(args, NULL, sizeof(args));
+  memset(args, 0, sizeof(args));
 
   uint64_t pre_stack_ptr = stack.ptr;
 
@@ -2407,8 +2412,8 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       stack_push__s_class_instance_ptr(&stack, value);
     } else if (op->type == OP_AccessField) {
       s_class_instance *target = stack_pop__s_class_instance_ptr(&stack);
-      s_class_instance *value = target->data[op->payload.field->data_index];
-      stack_push__s_class_instance_ptr(&stack, value);
+      s_class_instance *field = target->data.fields[op->payload.field->data_index];
+      stack_push__s_class_instance_ptr(&stack, field);
     } else if (op->type == OP_AccessSymbol) {
     } else if (op->type == OP_UseTemporaryInstance) {
       stack_push__s_class_instance_ptr(&stack, op->payload.temporary);
@@ -2524,25 +2529,25 @@ void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_inst
 /* ##### STDLIB 3rd avenue ##### */
 void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
-  self->data = NEW(s_number);
+  self->data.payload = NEW(s_number);
 }
 void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Constructor");
-  s_number *num_B = (s_number *)args[0]->data;
+  s_number *num_B = (s_number *)args[0]->data.payload;
 
   s_number *new = NEW(s_number);
   new->isDecimal = num_B->isDecimal;
   new->content = num_B->content;
 
-  self->data = new;
+  self->data.payload = new;
 }
 
 void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Add_Number");
 
-  s_number *num_B = (s_number *)args[0]->data;
-  s_number *num_self = (s_number *)self->data;
-  s_number *num_ret = (s_number *)ret->data;
+  s_number *num_B = (s_number *)args[0]->data.payload;
+  s_number *num_self = (s_number *)self->data.payload;
+  s_number *num_ret = (s_number *)ret->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
   bool allDecimal = num_self->isDecimal && num_B->isDecimal;
@@ -2562,9 +2567,9 @@ void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 
 void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Sub_Number");
-  s_number *num_B = (s_number *)args[0]->data;
-  s_number *num_self = (s_number *)self->data;
-  s_number *num_ret = (s_number *)ret->data;
+  s_number *num_B = (s_number *)args[0]->data.payload;
+  s_number *num_self = (s_number *)self->data.payload;
+  s_number *num_ret = (s_number *)ret->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
   bool allDecimal = num_self->isDecimal && num_B->isDecimal;
@@ -2586,9 +2591,9 @@ void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 
 void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Mul_Number");
-  s_number *num_B = (s_number *)args[0]->data;
-  s_number *num_self = (s_number *)self->data;
-  s_number *num_ret = (s_number *)ret->data;
+  s_number *num_B = (s_number *)args[0]->data.payload;
+  s_number *num_self = (s_number *)self->data.payload;
+  s_number *num_ret = (s_number *)ret->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
   bool allDecimal = num_self->isDecimal && num_B->isDecimal;
@@ -2610,9 +2615,9 @@ void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 
 void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Less_Number");
-  s_number *num_B = (s_number *)args[0]->data;
-  s_number *num_self = (s_number *)self->data;
-  s_number *num_ret = (s_number *)ret->data;
+  s_number *num_B = (s_number *)args[0]->data.payload;
+  s_number *num_self = (s_number *)self->data.payload;
+  s_number *num_ret = (s_number *)ret->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
 
@@ -2629,9 +2634,9 @@ void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_i
 
 void number_Gt_Number(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Gt_Number");
-    s_number* num_B = (s_number*)args[0]->data;
-    s_number* num_self = (s_number*)self->data;
-    s_number* num_ret = (s_number*)ret->data;
+    s_number* num_B = (s_number*)args[0]->data.payload;
+    s_number* num_self = (s_number*)self->data.payload;
+    s_number* num_ret = (s_number*)ret->data.payload;
 
     bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
 
@@ -2649,9 +2654,9 @@ void number_Gt_Number(s_class_instance* ret, s_class_instance* self, s_class_ins
 
 void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Assign_Number");
-  s_number *num_B = (s_number *)args[0]->data;
-  s_number *num_self = (s_number *)self->data;
-  s_number *num_ret = (s_number *)ret->data;
+  s_number *num_B = (s_number *)args[0]->data.payload;
+  s_number *num_self = (s_number *)self->data.payload;
+  s_number *num_ret = (s_number *)ret->data.payload;
 
   num_self->isDecimal = num_B->isDecimal;
   num_self->content = num_B->content;
@@ -2659,7 +2664,7 @@ void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class
 
 void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_Print");
-  s_number *num_self = (s_number *)self->data;
+  s_number *num_self = (s_number *)self->data.payload;
   if (num_self->isDecimal)
     printf("%lf\n", num_self->content.decimal);
   else
@@ -2668,9 +2673,9 @@ void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
 
 void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("number_ToString");
-  s_number *num_self = (s_number *)self->data;
+  s_number *num_self = (s_number *)self->data.payload;
 
-  s_string *str_ret = (s_string *)ret->data;
+  s_string *str_ret = (s_string *)ret->data.payload;
   str_ret->content = NULL;
   string_resize(str_ret, 20);
 
@@ -2682,9 +2687,9 @@ void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_inst
 
 void number_Inc(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Inc");
-    s_number* num_self = (s_number*)self->data;
+    s_number* num_self = (s_number*)self->data.payload;
 
-    s_string* str_ret = (s_string*)ret->data;
+    s_string* str_ret = (s_string*)ret->data.payload;
     str_ret->content = NULL;
     string_resize(str_ret, 20);
 
@@ -2696,9 +2701,9 @@ void number_Inc(s_class_instance* ret, s_class_instance* self, s_class_instance*
 
 void number_Dec(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Dec");
-    s_number* num_self = (s_number*)self->data;
+    s_number* num_self = (s_number*)self->data.payload;
 
-    s_string* str_ret = (s_string*)ret->data;
+    s_string* str_ret = (s_string*)ret->data.payload;
     str_ret->content = NULL;
     string_resize(str_ret, 20);
 
@@ -2709,29 +2714,29 @@ void number_Dec(s_class_instance* ret, s_class_instance* self, s_class_instance*
 }
 
 void string_resize(s_string *str, uint64_t len) {
-  uint32_t old_blocks = (str->len / 2048) + 1;
-  uint32_t new_blocks = (len / 2048) + 1;
+  uint32_t old_blocks = (str->len / STR_ALLOC_BLOCK) + 1;
+  uint32_t new_blocks = (len / STR_ALLOC_BLOCK) + 1;
 
   str->len = len;
 
   if ((old_blocks < new_blocks) || (str->content == NULL)) {
     free(str->content);
-    str->content = (char *)malloc(new_blocks * 2048);
-    memset(str->content, 0, new_blocks * 2048);
+    str->content = (char *)malloc(new_blocks * STR_ALLOC_BLOCK);
+    memset(str->content, 0, new_blocks * STR_ALLOC_BLOCK);
   }
 }
 
 void string_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Constructor");
-  self->data = NEW(s_string);
-  string_resize(self->data, 10);
+  self->data.payload = NEW(s_string);
+  string_resize(self->data.payload, 10);
 }
 void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Constructor");
 
-  self->data = NEW(s_string);
-  s_string *str_self = (s_string *)self->data;
-  s_string *str_B = (s_string *)args[0]->data;
+  self->data.payload = NEW(s_string);
+  s_string *str_self = (s_string *)self->data.payload;
+  s_string *str_B = (s_string *)args[0]->data.payload;
 
   string_resize(str_self, str_B->len);
   strcpy(str_self->content, str_B->content);
@@ -2739,8 +2744,8 @@ void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_
 
 void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Assign_String");
-  s_string *str_self = (s_string *)self->data;
-  s_string *str_B = (s_string *)args[0]->data;
+  s_string *str_self = (s_string *)self->data.payload;
+  s_string *str_B = (s_string *)args[0]->data.payload;
 
   string_resize(str_self, str_B->len);
   strcpy(str_self->content, str_B->content);
@@ -2748,9 +2753,9 @@ void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class
 
 void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Add_String");
-  s_string *str_ret = (s_string *)ret->data;
-  s_string *str_self = (s_string *)self->data;
-  s_string *str_B = (s_string *)args[0]->data;
+  s_string *str_ret = (s_string *)ret->data.payload;
+  s_string *str_self = (s_string *)self->data.payload;
+  s_string *str_B = (s_string *)args[0]->data.payload;
 
   uint64_t len = str_self->len + str_B->len;
 
@@ -2762,12 +2767,12 @@ void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_in
 void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Add_Number");
 
-  s_string *str_ret = (s_string *)ret->data;
-  s_string *str_self = (s_string *)self->data;
+  s_string *str_ret = (s_string *)ret->data.payload;
+  s_string *str_self = (s_string *)self->data.payload;
 
   char tmp[32];
   memset(tmp, 0, 32);
-  int ret_len = sprintf(tmp, "%ld", args[0]->data) + 1;
+  int ret_len = sprintf(tmp, "%ld", args[0]->data.payload) + 1;
 
   uint64_t len = str_self->len + ret_len;
 
@@ -2778,7 +2783,7 @@ void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 
 void string_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Print");
-  s_string *str_self = (s_string *)self->data;
+  s_string *str_self = (s_string *)self->data.payload;
   printf("%s\n", str_self->content);
 }
 
@@ -2818,7 +2823,7 @@ void stdlib_Init(s_compiler *compiler) {
 /* ##### MAIN town ##### */
 s_scope *rootScope;
 
-int main() {
+int main(int argc, char **argv) {
   const char *intro =
 "  ____ _____________  \n"
 " |    |   \\______   \\ \n"
@@ -2829,8 +2834,9 @@ int main() {
 " UP Interpreter  v0.4\n";
   printf("%s", intro);
 
-  //char *srcFilename = "examples/ex1.up";
-  char *srcFilename = "examples/ex0.up";
+  if (argc < 2) PERROR("main", "Source file not defined!");
+
+  char *srcFilename = argv[1];
 
   fanalysis = fopen("analysis.txt", "w");
 

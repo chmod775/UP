@@ -7,6 +7,8 @@
 #ifndef UP
 #define UP
 
+#define STR_ALLOC_BLOCK   32
+
 /* ##### Colors heaven ##### */
 #define COLOR_RED "31"
 #define COLOR_GREEN "32"
@@ -485,7 +487,7 @@ s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type,
 s_statement *statement_CreateBlock(s_statement *parent);
 
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent);
-s_statement *compile_Statement(s_compiler *compiler, s_statement *parent);
+s_statement *compile_Statement(s_compiler *compiler, s_statement *parent, bool expect_termination);
 
 /* ##### GENERIC STATEMENT ##### */
 s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent);
@@ -576,7 +578,10 @@ bool method_CheckArgumentTypes(s_method_def *method, s_list *args);
 /* ##### CLASS ##### */
 struct _s_class_instance {
   s_symbol *class;
-  s_class_instance **data;
+  union {
+    s_class_instance **fields;
+    void *payload;
+  } data;
 };
 
 struct _s_exe_scope {
