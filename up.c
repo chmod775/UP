@@ -851,7 +851,7 @@ void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
 
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
-  compile_Statement(compiler, compiler->rootStatement);
+  compile_Statement(compiler, compiler->rootStatement, true);
 }
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type) {
@@ -1615,7 +1615,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
   match(ret_statement->scope, '{');
 
   while (token.type != '}') {
-    s_statement *statement = compile_Statement(compiler, ret_statement);
+    s_statement *statement = compile_Statement(compiler, ret_statement, true);
     list_push(ret_statement->body.block->statements, statement);
   }
 
@@ -1718,7 +1718,7 @@ s_statement *compile_MethodDefinition(s_symbol *symbol, s_compiler *compiler, s_
   match(ret_statement->scope, '{');
 
   while (token.type != '}') {
-    s_statement *statement = compile_Statement(compiler, ret_statement);
+    s_statement *statement = compile_Statement(compiler, ret_statement, true);
     list_push(ret_statement->body.block->statements, statement);
   }
 
@@ -1887,7 +1887,7 @@ s_statement *compile_If(s_compiler *compiler, s_statement *parent) {
   ret->body._if = NEW(s_statementbody_if);
 
   ret->body._if->check = compile_Expression(compiler, ret);
-  ret->body._if->_true = compile_Statement(compiler, ret);
+  ret->body._if->_true = compile_Statement(compiler, ret, true);
 
   return ret;
 }
@@ -1907,27 +1907,31 @@ s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
   ret->body._for->step = list_create();
 
   // Init statement
-  while (token.type != ';') {
-    s_statement *expr = compile_Expression(compiler, ret);
+  while (token.type != ',') {
+    s_statement *expr = compile_Statement(compiler, ret, false);
+
+    if (token.type == ';')
+        match(ret->scope, ';');
+
     list_push(ret->body._for->init, expr);
-    if (token.type == ',')
-      match(ret->scope, ',');
   }
-  match(ret->scope, ';');
+  match(ret->scope, ',');
 
   ret->body._for->check = compile_Expression(compiler, ret);
-  match(ret->scope, ';');
+  match(ret->scope, ',');
 
   while (token.type != ')') {
-    s_statement *expr = compile_Expression(compiler, ret);
+    s_statement *expr = compile_Statement(compiler, ret, false);
+
+    if (token.type == ';')
+        match(ret->scope, ';');
+
     list_push(ret->body._for->step, expr);
-    if (token.type == ',')
-      match(ret->scope, ',');
   }
 
   match(ret->scope, ')');
 
-  ret->body._for->loop = compile_Statement(compiler, ret);
+  ret->body._for->loop = compile_Statement(compiler, ret, true);
 
   return ret;
 }
@@ -1942,7 +1946,7 @@ s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
   ret->body._while = NEW(s_statementbody_while);
 
   ret->body._while->check = compile_Expression(compiler, ret);
-  ret->body._while->loop = compile_Statement(compiler, ret);
+  ret->body._while->loop = compile_Statement(compiler, ret, true);
 
   return ret;
 }
@@ -2073,7 +2077,7 @@ s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *pare
   return ret;
 }
 
-s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
+s_statement *compile_Statement(s_compiler *compiler, s_statement *parent, bool expect_termination) {
 	PANALYSIS("compile_Statement");
   // Statements types:
   // 1. if (...) <statement> [else <statement>]
@@ -2104,7 +2108,7 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     ret = statement_CreateBlock(parent);
 
     while (token.type != '}') {
-      s_statement *statement = compile_Statement(compiler, ret);
+      s_statement *statement = compile_Statement(compiler, ret, true);
       list_push(ret->body.block->statements, statement);
     }
 
@@ -2118,16 +2122,21 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent) {
     if (next_token.type == ':') {
       // Field definition
       ret = compile_LocalFieldDefinition(compiler, parent);
-      match(parent->scope, ';');
-    } else {
+      if (expect_termination)
+          match(parent->scope, ';');
+    }
+    else {
+        // Expression (espresso ?)
+        ret = compile_Expression(compiler, parent);
+        if (expect_termination)
+            match(parent->scope, ';');
+    }
+  }
+  else {
       // Expression (espresso ?)
       ret = compile_Expression(compiler, parent);
-      match(parent->scope, ';');
-    }
-  } else {
-    // Expression (espresso ?)
-    ret = compile_Expression(compiler, parent);
-    match(parent->scope, ';');
+      if (expect_termination)
+        match(parent->scope, ';');
   }
 
   return ret;
@@ -2295,7 +2304,7 @@ e_statementend __core_for(s_exe_scope exe) {
   // Init expressions
   s_symbol *init_expr = list_read_first(statement_body->init);
   while (init_expr != NULL) {
-    __core_exe_expression(SUB_EXE_SCOPE(exe, init_expr));
+      __core_exe_statement(SUB_EXE_SCOPE(exe, init_expr));
     init_expr = list_read_next(statement_body->init);
   }
 
@@ -2312,7 +2321,7 @@ e_statementend __core_for(s_exe_scope exe) {
     // Step expressions
     s_symbol *step_expr = list_read_first(statement_body->step);
     while (step_expr != NULL) {
-      __core_exe_expression(SUB_EXE_SCOPE(exe, step_expr));
+      __core_exe_statement(SUB_EXE_SCOPE(exe, step_expr));
       step_expr = list_read_next(statement_body->step);
     }
 
@@ -2817,7 +2826,7 @@ int main() {
 " |    |  / |    |     \n"
 " |______/  |____|     \n"
 "                      \n"
-" UP Interpreter  v0.35\n";
+" UP Interpreter  v0.4\n";
   printf("%s", intro);
 
   //char *srcFilename = "examples/ex1.up";

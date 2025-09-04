@@ -45,8 +45,13 @@ Main() {
   i--;
   i.Print();
 
-  for (i = 10; i > 0; i-- ) {
+  for (i = 10, i > 0, i-- ) {
     i.Print();
+  }
+
+  for (j : Number(10); k: Number(775), j > 0, j--; k++ ) {
+    j.Print();
+    k.Print();
   }
   
 }

@@ -14,40 +14,40 @@ v0.3
   - [BUG]- Allow function arguments to have names equal to properties of the class
 
 v0.4
-  - Re-think return from methods (I like the idea to pre-allocate the return object, but require more 'fexibility'. Like istantiate object with different constructor or link another object)
+  - [ ] Re-think return from methods (I like the idea to pre-allocate the return object, but require more 'fexibility'. Like istantiate object with different constructor or link another object)
 
-  - FOR statement
+  - [x] FOR statement
+    + [x] Permit inline variable declaration (ex. 'for (i : Number(0); i < 10; i++)...')
+  - [ ] SWITCH statement
+  - [ ] API definition
+  - [ ] Add Indexer '[]' and Range '..' operators
+  - [ ] Reflections
+  - [ ] Setters / Getters for fields
+  - [ ] Method arguments must be sa local field with initialized value from call argument
 
-  - SWITCH statement
-  - API definition
-  - Add Indexer '[]' and Range '..' operators
-  - Reflections
-  - Setters / Getters for fields
-  - Method arguments must be sa local field with initialized value from call argument
-
-  - VS-Code and Monaco syntax highlighting
+  - [ ] VS-Code and Monaco syntax highlighting
 
 v0.5
-  - Garbage collection and reusable class instances in class_CreateInstance
+  - [ ] Garbage collection and reusable class instances in class_CreateInstance
     + Use a list in the global class with all the created instances. If list is not empty pull from that, otherwise create new instance
     + Always call constructor and fields initialization
-  - Generics in classes (like C#)
+  - [ ] Generics in classes (like C#)
 
-  - '=>' link operation (like pointers. Copy address and point to class instance. Useful for garbage collection)
-  - List and Dictionary classes
-  - Try / Catch
-  - Regex (using class ?)
-  - JSON (using class ?)
-  - Advanced class inheritance with mixing (multiple parents)
-  - Add Lambda functions
-  - Support for "Optional" values (can be undefined. Allow support for operators like '!' and '?')
-  - Method / Field override behaviour
-  - FOREACH statement
+  - [ ] '=>' link operation (like pointers. Copy address and point to class instance. Useful for garbage collection)
+  - [ ] List and Dictionary classes
+  - [ ] Try / Catch
+  - [ ] Regex (using class ?)
+  - [ ] JSON (using class ?)
+  - [ ] Advanced class inheritance with mixing (multiple parents)
+  - [ ] Add Lambda functions
+  - [ ] Support for "Optional" values (can be undefined. Allow support for operators like '!' and '?')
+  - [ ] Method / Field override behaviour
+  - [ ] FOREACH statement
     + Add YIELD operator
 
 v?
-  - JSON export / import for every object
-  - Dump / Load all memory to a JSON (like saving a snapshot for old NES games)
-  - GIT like included features for "seamless" switch to changes in software (using above feature JSON dump/load)
-  - Method failover (default return with generic exception)
-  - Async methods
+  - [ ] JSON export / import for every object
+  - [ ] Dump / Load all memory to a JSON (like saving a snapshot for old NES games)
+  - [ ] GIT like included features for "seamless" switch to changes in software (using above feature JSON dump/load)
+  - [ ] Method failover (default return with generic exception)
+  - [ ] Async methods
