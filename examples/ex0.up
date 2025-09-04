@@ -1,0 +1,42 @@
+Number {
+  Print() {
+    this.ToString().Print();
+  }
+}
+
+/*
+ClassA {
+  () { }
+
+  SayName(name : String) {
+    name.Print();
+  }
+}
+
+ClassB {
+  () { }
+
+  SayValue() {
+
+  }
+}
+
+Class : ClassA, ClassB {
+  () { }
+  
+}
+*/
+Test {
+  () { }
+
+  foo : Number(775);
+}
+
+
+
+Main() {
+  a : Test();
+  a.foo.Print();
+  n : Number(776);
+  n.Print();
+}

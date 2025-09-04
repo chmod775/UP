@@ -11,8 +11,9 @@ v0.3
   OK - [BUG]- (this + "a").Print(); 
   OK - [BUG]- For list read return the S_LIST_ITEM and not the payload. Otherwise list is like a global object (see __core_exe_statement).
   + Basic class inheritance
+  - [BUG]- Allow function arguments to have names equal to properties of the class
 
-v0.35
+v0.4
   - Method arguments must be sa local field with initialized value from call argument
   - Garbage collection and reusable class instances in class_CreateInstance
     + Use a list in the global class with all the created instances. If list is not empty pull from that, otherwise create new instance
@@ -20,8 +21,11 @@ v0.35
   - Method / Field override behaviour
   - Generics in classes (like C#)
   - Re-think return from methods (I like the idea to pre-allocate the return object, but require more 'fexibility'. Like istantiate object with different constructor or link another object)
+  - Setters / Getters for fields
+  - Add Indexer '[]' and Range '..' operators
+  - VS-Code and Monaco syntax highlighting
 
-v0.4
+v0.5
   - FOR statement
   - SWITCH statement
   - API definition
@@ -32,6 +36,8 @@ v0.4
   - Regex (using class ?)
   - JSON (using class ?)
   - Advanced class inheritance with mixing (multiple parents)
+  - Add Lambda functions
+  - Support for "Optional" values (can be undefined. Allow support for operators like '!' and '?')
 
 v?
   - JSON export / import for every object

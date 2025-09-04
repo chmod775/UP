@@ -1,0 +1,10 @@
+Interfaces: Possibility to derive from multiple casses
+Generics: Like C#, using the above concept
+Statics: Add '$' to the start of the field/method name?
+Privates: Add '_' to the start of the field/method name?
+Consts/Immutable: FULLCASE fields
+Constructors: Nameless method
+Reflection: Using the generic "Object" class?
+Import/Dependencies: Using "import" keywork (can be defined as a "Main" class default function?)
+Pointers: Using the Link operator "=>"?
+

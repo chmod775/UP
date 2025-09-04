@@ -23,8 +23,14 @@ FILE *fanalysis;
 #define PANALYSIS 
 #endif
 
-#define PERROR(A, B, ...) { printf("\033[0;31m[" A "] Error! - " B "\033[0m\n", ##__VA_ARGS__ ); exit(-1); }
-#define CERROR(C, A, B, ...) { printf("\033[0;31m[" A "] Error Line: %d - " B "\033[0m\n", (C->parser->line), ##__VA_ARGS__ ); exit(-1); }
+#define PERROR(A, B, ...) { \
+printf("\033[0;31m[" A "] Error! - " B "\033[0m\n", ##__VA_ARGS__ ); \
+exit(-1); \
+}
+#define CERROR(C, A, B, ...) { \
+printf("\033[0;31m[" A "] Error Line: %d - " B "\033[0m\n", (C->parser->line), ##__VA_ARGS__ ); \
+exit(-1); \
+}
 
 void *t_new = NULL;
 #define NEW(T) t_new = malloc(sizeof(T)); memset(t_new, 0, sizeof(T)); if (t_new == NULL) { PERROR("NEW(##T)", "Could not malloc"); exit(-1); }
@@ -524,6 +530,8 @@ int parse_Next(s_scope *scope, s_parser *parser) {
     }
     else if (token == '"' || token == '\'') {
       token_val_string = (char *)malloc(sizeof(char) * 128);
+      memset(token_val_string, 0, 128);
+
       char *token_val_string_ptr = token_val_string;
       while (*src != 0 && *src != token) {
         char ch = *src++;
@@ -864,6 +872,8 @@ s_symbol *expression_GetClassOfOperation(s_expression_operation *operation) {
 
   if (operation->type == OP_LoadSymbol) {
     ret = operation->payload.symbol->body.field->value.type;
+  } else if (operation->type == OP_AccessField) {
+    ret = operation->payload.field->symbol->body.field->value.type;
   } else if ((operation->type == OP_LoadThis) || (operation->type == OP_LoadReturn)) {
     ret = operation->payload.symbol;
   } else if (operation->type == OP_UseTemporaryInstance) {
@@ -1033,6 +1043,31 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       if (symbol->type == SYMBOL_CLASS) {
         op = expression_Emit(operations, OP_AccessSymbol);
         op->payload.symbol = symbol;
+      } else if (symbol->type == SYMBOL_FIELD) {
+        s_expression_operation *last_op = list_read_last(operations);
+        s_symbol *last_sym = expression_GetClassOfOperation(last_op);
+
+        s_list *fields = last_sym->body.class->fields;
+
+        op = expression_Emit(operations, OP_AccessField);
+
+        uint64_t symbol_index = 0;
+        s_symbol *symbol_ptr = list_read_first(fields);
+        uint64_t symbol_ptr_index = 0;
+        while (symbol_ptr != NULL) {
+          if (symbol_ptr->hash == symbol->hash) {
+            if (!memcmp(symbol_ptr->name, symbol->name, symbol_ptr->length))
+              break;
+          }
+          symbol_index++;
+          symbol_ptr = list_read_next(fields);
+        }
+
+        s_expression_field *field = NEW(s_expression_field);
+        field->symbol = symbol;
+        field->data_index = symbol_index;
+
+        op->payload.field = field;
       } else {
         op = expression_Emit(operations, OP_LoadSymbol);
         op->payload.symbol = symbol;
@@ -1087,6 +1122,9 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
         } else {
           CERROR(compiler, "expression_Step", "Access symbol is not valid.");
         }
+      } else if (last_op->type == OP_AccessField) {
+        s_symbol *op_symbol = last_op->payload.field->symbol;
+        parent_scope = op_symbol->body.field->value.type->body.class->scope;
       } else if (last_op->type == OP_UseTemporaryInstance) {
         parent_scope = last_op->payload.temporary->class->body.class->scope;
       } else if ((last_op->type == OP_MethodCall) || (last_op->type == OP_ConstructorCall)) {
@@ -1248,6 +1286,7 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
 
   newMethod->body.type = METHODBODY_CALLBACK;
   newMethod->body.content.callback = cb;
+  newMethod->symbol = symbol_name;
 
   // Add arguments
   newMethod->arguments = list_create();
@@ -1319,18 +1358,23 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   instance->class = class;
 
   // Allocate data space
-  instance->data = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
+  if (instance->class->body.class->fields->items_count > 0)
+    instance->data = (s_class_instance **)malloc(sizeof(s_class_instance *) * instance->class->body.class->fields->items_count);
+  else
+    instance->data = NULL;
 
   // Initialize fields
+  uint64_t field_index = 0;
   s_symbol *field_symbol = list_read_first(instance->class->body.class->fields);
   while (field_symbol != NULL) {
     s_class_instance *init_value = __core_exe_expression(EXE_SCOPE(NULL, instance, field_symbol->body.field->init_expression));
 
     if (init_value->class != field_symbol->body.field->value.type) PERROR("class_CreateInstance", "Wrong instance for field \"%s\" initialization. Expected \"%s\", given \"%s\"", symbol_GetCleanName(field_symbol), symbol_GetCleanName(field_symbol->body.field->value.type), symbol_GetCleanName(init_value->class));
 
-    instance->data[field_symbol->body.field->value.data_index] = init_value;
+    instance->data[field_index] = init_value;
 
     field_symbol = list_read_next(instance->class->body.class->fields);
+    field_index++;
   }
 
   return instance;
@@ -1401,7 +1445,8 @@ void compile_ClassBody(s_compiler *compiler, s_statement *class) {
       if (statement->type == STATEMENT_FIELD_DEF) {
         s_symbol *field_symbol = statement->body.field_def->symbol;
         s_list *fields_list = class_body->symbol->body.class->fields;
-        field_symbol->body.field->value.data_index = fields_list->items_count;
+
+        ////field_symbol->body.field->value.data_index = fields_list->items_count;
         list_push(fields_list, field_symbol);
       } else if (statement->type == STATEMENT_METHOD_DEF) {
         list_push(class_body->symbol->body.class->methods, statement->body.method_def->symbol);
@@ -2176,7 +2221,7 @@ void debug_info_class(s_symbol *class) {
 }
 
 void debug_info_field(char *prefix, s_symbol *symbol) {
-  printf("%s" BOLD(COLOR_YELLOW, "Content index:") NORMAL(COLOR_YELLOW, " %d") "\n", prefix, symbol->body.field->value.data_index);
+  ////printf("%s" BOLD(COLOR_YELLOW, "Content index:") NORMAL(COLOR_YELLOW, " %d") "\n", prefix, symbol->body.field->value.data_index);
   printf("%s" BOLD(COLOR_YELLOW, "Content type:") NORMAL(COLOR_YELLOW, " %s") "\n", prefix, symbol_GetCleanName(symbol->body.field->value.type));
 }
 
@@ -2328,6 +2373,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
   s_list *operations = exe.statement->body.expression->operations;
 
   s_class_instance *args[32];
+  memset(args, NULL, sizeof(args));
 
   uint64_t pre_stack_ptr = stack.ptr;
 
@@ -2341,15 +2387,16 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       s_class_instance *value = NULL;
       if (op->payload.symbol->type == SYMBOL_ARGUMENT) {
         value = op->payload.symbol->body.argument->value.data;
-      } else if (op->payload.symbol->type == SYMBOL_FIELD) {
-        s_class_instance *target = stack_pop__s_class_instance_ptr(&stack);
-        value = target->data[op->payload.symbol->body.field->value.data_index];
       } else if (op->payload.symbol->type == SYMBOL_LOCAL) {
         value = (s_class_instance *)list_read_selected(op->payload.symbol->body.local->value.instances);
       } else {
         PERROR("__core_exe_expression", "Access symbol not allowed.");
       }
 
+      stack_push__s_class_instance_ptr(&stack, value);
+    } else if (op->type == OP_AccessField) {
+      s_class_instance *target = stack_pop__s_class_instance_ptr(&stack);
+      s_class_instance *value = target->data[op->payload.field->data_index];
       stack_push__s_class_instance_ptr(&stack, value);
     } else if (op->type == OP_AccessSymbol) {
     } else if (op->type == OP_UseTemporaryInstance) {
@@ -2380,9 +2427,33 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       if (op->type == OP_MethodCall) {
         if (op->payload.method->ret_type != NULL) {
           ret = stack_pop__s_class_instance_ptr(&stack);
+
+          // Search default constructor
+          // TODO: Pre-find default constructor of class for speed optmizzation
+          s_method_def *found_constructor = list_read_first(ret->class->body.class->constructors);
+          while (found_constructor != NULL) {
+            if (found_constructor->arguments->items_count == 0)
+              break;
+            found_constructor = list_read_next(ret->class->body.class->constructors);
+          }
+
+          if (found_constructor != NULL)
+            __exe_method(ret, found_constructor, ret, args);
         }
       } else if (op->type == OP_ConstructorCall) {
         ret = class_CreateInstance(op->payload.method->ret_type);
+
+        // Search default constructor
+        // TODO: Pre-find default constructor of class for speed optmizzation
+        s_method_def *found_constructor = list_read_first(ret->class->body.class->constructors);
+        while (found_constructor != NULL) {
+          if (found_constructor->arguments->items_count == 0)
+            break;
+          found_constructor = list_read_next(ret->class->body.class->constructors);
+        }
+
+        if (found_constructor != NULL)
+          __exe_method(ret, found_constructor, ret, args);
       }
 
       // Pop arguments from stack
@@ -2555,12 +2626,14 @@ void string_resize(s_string *str, uint64_t len) {
   if ((old_blocks < new_blocks) || (str->content == NULL)) {
     free(str->content);
     str->content = (char *)malloc(new_blocks * 2048);
+    memset(str->content, 0, new_blocks * 2048);
   }
 }
 
 void string_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Constructor");
   self->data = NEW(s_string);
+  string_resize(self->data, 10);
 }
 void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
 	PANALYSIS("string_Constructor");
@@ -2602,6 +2675,7 @@ void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   s_string *str_self = (s_string *)self->data;
 
   char tmp[32];
+  memset(tmp, 0, 32);
   int ret_len = sprintf(tmp, "%ld", args[0]->data) + 1;
 
   uint64_t len = str_self->len + ret_len;
@@ -2662,7 +2736,7 @@ int main() {
   printf("%s", intro);
 
   //char *srcFilename = "examples/ex1.up";
-  char *srcFilename = "test.up";
+  char *srcFilename = "examples/ex1.up";
 
   fanalysis = fopen("analysis.txt", "w");
 
@@ -2673,5 +2747,6 @@ int main() {
 
   fclose(fanalysis);
 
+  scanf("Press any KEY to exit");
   return 0;
 }

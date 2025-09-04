@@ -191,7 +191,6 @@ typedef struct _s_symbol s_anytype;
 
 typedef struct {
   s_anytype *type;
-  uint64_t data_index;
 } s_anyvalue_field;
 
 typedef struct {
@@ -505,11 +504,18 @@ typedef enum {
   OP_LoadThis,
   OP_LoadReturn,
   OP_Link,
-  OP_AccessSymbol
+  OP_AccessSymbol,
+  OP_AccessField
 } e_expression_operation_type;
+
+typedef struct {
+  s_symbol *symbol;
+  uint64_t data_index;
+} s_expression_field;
 
 typedef union {
   s_symbol *symbol;
+  s_expression_field *field;
   s_method_def *method;
   s_class_instance *temporary;
 } u_expression_operation_payload;
@@ -550,6 +556,7 @@ typedef struct {
 
 struct _s_method_def {
   int hash;
+  s_symbol *symbol;
   s_anytype *ret_type;
   s_list *arguments; // <s_symbol>
   s_methodbody body;
