@@ -180,7 +180,9 @@ s_token_operator token_operators[] = {
   {.method_name = "Mod",        .args_count = 1,    .sub_token = TOKEN_Inc },       // TOKEN_Mod
 
   {.method_name = "Inc",        .args_count = 0,    .sub_token = TOKEN_Inc },       // TOKEN_Inc
-  {.method_name = "Dec",        .args_count = 0,    .sub_token = TOKEN_Dec }        // TOKEN_Dec
+  {.method_name = "Dec",        .args_count = 0,    .sub_token = TOKEN_Dec },        // TOKEN_Dec
+
+  {.method_name = "Index",      .args_count = 1,    .sub_token = TOKEN_Assign }        // TOKEN_Brak
 };
 
 /* ##### Types ##### */
@@ -551,7 +553,7 @@ typedef enum {
 
 typedef union {
   s_statement *statement;
-  void (*callback)(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
+  void (*callback)(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
 } u_methodbody_content;
 
 typedef struct {
@@ -619,7 +621,7 @@ define_stack(s_class_instance *, s_class_instance_ptr);
 s_stack__s_class_instance_ptr stack;
 
 void __exe_initializeFieldInInstance(s_class_instance *instance, s_symbol *field_symbol);
-void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args);
+void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance **return_instance, s_class_instance **args);
 
 s_class_instance *__core_exe_expression(s_exe_scope exe);
 

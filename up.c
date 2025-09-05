@@ -753,10 +753,14 @@ int parse_Next(s_scope *scope, s_parser *parser) {
       if (ch == '@') {
         src_advance;
         ret(TOKEN_Debug_Info, NULL, any);
-      } else {
+      }
+      else {
         ret(TOKEN_Debug_Breakpoint, NULL, any);
       }
-    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == '[' || token == ']' || token == ',') {
+    }
+    else if (token == '[') {
+      ret(TOKEN_Brak, NULL, any);
+    } else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == ']' || token == ',') {
       // directly return the character as token;
       ret(token, NULL, any);
     }
@@ -1202,6 +1206,18 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
       match(parent_scope, TOKEN_Dot);
       op = expression_Step(compiler, statement, parent_scope, operations, TOKEN_Dot);
+    } else if (token.type == TOKEN_Brak) {
+      s_token_operator token_operator = token_operators[token.type - TOKEN_Assign];
+      match(scope, TOKEN_Brak);
+
+      s_list* args = list_create();
+      s_expression_operation* op_arg = expression_Step(compiler, statement, scope, operations, token_operator.sub_token);
+      list_push(args, op_arg);
+
+      match(scope, ']');
+
+      s_method_def* found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
+      op = expression_MethodCall(operations, found_methodOverload);
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1275,7 +1291,7 @@ s_symbol *class_Create(char *name, s_scope *scope, s_symbol *parent) {
   return symbol;
 }
 
-s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...) {
+s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance **ret, s_class_instance *self, s_class_instance **args), int nArguments, ...) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateConstructor", "Destination is not a Class.");
 
   va_list valist;
@@ -1332,7 +1348,7 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
   va_end(valist);
 }
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...) {
+s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance **ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...) {
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateMethod", "Destination is not a Class.");
   if (name == NULL) PERROR("class_CreateMethod", "Name cannot be null.");
 
@@ -1870,9 +1886,9 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
 
       match(symbol_body->scope, TOKEN_Symbol);
     }
-  } else if (token.type == '[') {
+  } else if (token.type == TOKEN_Brak) {
     // List
-    match(statement->scope, '[');
+    match(statement->scope, TOKEN_Brak);
 
     // TODO
 
@@ -2469,7 +2485,7 @@ e_statementend __core_while(s_exe_scope exe) {
   return STATEMENT_END_CONTINUE;
 }
 
-void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args) {
+void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance **return_instance, s_class_instance **args) {
   PANALYSIS("__exe_method");
   if (method->body.type == METHODBODY_STATEMENT) {
     // Map arguments value
@@ -2565,7 +2581,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
           }
 
           if (found_constructor != NULL)
-            __exe_method(ret, found_constructor, ret, args);
+            __exe_method(ret, found_constructor, &ret, args);
         }
       } else if (op->type == OP_ConstructorCall) {
         ret = class_CreateInstance(op->payload.method->ret_type);
@@ -2580,7 +2596,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
         }
 
         if (found_constructor != NULL)
-          __exe_method(ret, found_constructor, ret, args);
+          __exe_method(ret, found_constructor, &ret, args);
       }
 
       // Pop arguments from stack
@@ -2596,9 +2612,9 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       s_class_instance *target = NULL;
       if (op->type == OP_MethodCall) {
         target = stack_pop__s_class_instance_ptr(&stack);
-        __exe_method(target, op->payload.method, ret, args);
+        __exe_method(target, op->payload.method, &ret, args);
       } else if (op->type == OP_ConstructorCall) {
-        __exe_method(ret, op->payload.method, ret, args);
+        __exe_method(ret, op->payload.method, &ret, args);
       }
 
       // Push return instance (if present)
@@ -2624,26 +2640,26 @@ s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *met
 }
 
 /* ##### Generic object LIB ##### */
-void object_Assign(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void object_Assign(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("object_Assign");
 
 }
 
-void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void object_Print(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("object_Print");
 }
 
-void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void object_ToString(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("object_ToString");
 }
 
 /* ##### STDLIB 3rd avenue ##### */
 #pragma region NumberLIB
-void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Constructor(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Constructor");
   self->data.payload = NEW(s_number);
 }
-void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Constructor_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Constructor");
   s_number *num_B = (s_number *)args[0]->data.payload;
 
@@ -2654,12 +2670,12 @@ void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_
   self->data.payload = new;
 }
 
-void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Add_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Add_Number");
 
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
-  s_number *num_ret = (s_number *)ret->data.payload;
+  s_number *num_ret = (s_number *)(*ret)->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
   bool allDecimal = num_self->isDecimal && num_B->isDecimal;
@@ -2677,11 +2693,11 @@ void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   }
 }
 
-void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Sub_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Sub_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
-  s_number *num_ret = (s_number *)ret->data.payload;
+  s_number *num_ret = (s_number *)(*ret)->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
   bool allDecimal = num_self->isDecimal && num_B->isDecimal;
@@ -2701,11 +2717,11 @@ void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   }
 }
 
-void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Mul_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Mul_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
-  s_number *num_ret = (s_number *)ret->data.payload;
+  s_number *num_ret = (s_number *)(*ret)->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
   bool allDecimal = num_self->isDecimal && num_B->isDecimal;
@@ -2725,11 +2741,11 @@ void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   }
 }
 
-void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Less_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Less_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
-  s_number *num_ret = (s_number *)ret->data.payload;
+  s_number *num_ret = (s_number *)(*ret)->data.payload;
 
   bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
 
@@ -2744,11 +2760,11 @@ void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_i
   }
 }
 
-void number_Gt_Number(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+void number_Gt_Number(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Gt_Number");
     s_number* num_B = (s_number*)args[0]->data.payload;
     s_number* num_self = (s_number*)self->data.payload;
-    s_number* num_ret = (s_number*)ret->data.payload;
+    s_number* num_ret = (s_number*)(*ret)->data.payload;
 
     bool anyDecimal = num_self->isDecimal || num_B->isDecimal;
 
@@ -2764,17 +2780,17 @@ void number_Gt_Number(s_class_instance* ret, s_class_instance* self, s_class_ins
     }
 }
 
-void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Assign_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Assign_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
-  s_number *num_ret = (s_number *)ret->data.payload;
+  s_number *num_ret = (s_number *)(*ret)->data.payload;
 
   num_self->isDecimal = num_B->isDecimal;
   num_self->content = num_B->content;
 }
 
-void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_Print(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_Print");
   s_number *num_self = (s_number *)self->data.payload;
   if (num_self->isDecimal)
@@ -2783,11 +2799,11 @@ void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
     printf("%lu\n", num_self->content.integer);
 }
 
-void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void number_ToString(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("number_ToString");
   s_number *num_self = (s_number *)self->data.payload;
 
-  s_string *str_ret = (s_string *)ret->data.payload;
+  s_string *str_ret = (s_string *)(*ret)->data.payload;
   str_ret->content = NULL;
   string_resize(str_ret, 20);
 
@@ -2797,11 +2813,11 @@ void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_inst
     sprintf(str_ret->content, "%ld", num_self->content.integer);
 }
 
-void number_Inc(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+void number_Inc(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Inc");
     s_number* num_self = (s_number*)self->data.payload;
 
-    s_string* str_ret = (s_string*)ret->data.payload;
+    s_string* str_ret = (s_string*)(*ret)->data.payload;
     str_ret->content = NULL;
     string_resize(str_ret, 20);
 
@@ -2811,7 +2827,7 @@ void number_Inc(s_class_instance* ret, s_class_instance* self, s_class_instance*
         num_self->content.integer++;
 }
 
-void number_Dec(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+void number_Dec(s_class_instance *ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Dec");
     s_number* num_self = (s_number*)self->data.payload;
 
@@ -2840,12 +2856,12 @@ void string_resize(s_string *str, uint64_t len) {
   }
 }
 
-void string_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void string_Constructor(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("string_Constructor");
   self->data.payload = NEW(s_string);
   string_resize(self->data.payload, 10);
 }
-void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void string_Constructor_String(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("string_Constructor");
 
   self->data.payload = NEW(s_string);
@@ -2856,7 +2872,7 @@ void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_
   strcpy(str_self->content, str_B->content);
 }
 
-void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void string_Assign_String(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("string_Assign_String");
   s_string *str_self = (s_string *)self->data.payload;
   s_string *str_B = (s_string *)args[0]->data.payload;
@@ -2865,9 +2881,9 @@ void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class
   strcpy(str_self->content, str_B->content);
 }
 
-void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void string_Add_String(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("string_Add_String");
-  s_string *str_ret = (s_string *)ret->data.payload;
+  s_string *str_ret = (s_string *)(*ret)->data.payload;
   s_string *str_self = (s_string *)self->data.payload;
   s_string *str_B = (s_string *)args[0]->data.payload;
 
@@ -2878,10 +2894,10 @@ void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_in
   strcat(str_ret->content, str_B->content);
 }
 
-void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void string_Add_Number(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("string_Add_Number");
 
-  s_string *str_ret = (s_string *)ret->data.payload;
+  s_string *str_ret = (s_string *)(*ret)->data.payload;
   s_string *str_self = (s_string *)self->data.payload;
 
   char tmp[32];
@@ -2895,7 +2911,7 @@ void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   strcat(str_ret->content, tmp);
 }
 
-void string_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
+void string_Print(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("string_Print");
   s_string *str_self = (s_string *)self->data.payload;
   printf("%s\n", str_self->content);
@@ -2903,12 +2919,12 @@ void string_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
 #pragma endregion StringLIB
 
 #pragma region ListLIB
-void list_Constructor(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+void list_Constructor(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
   PANALYSIS("list_Constructor");
   self->data.payload = list_create();
 }
 
-void list_Push(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+void list_Push(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
   PANALYSIS("list_Push");
 
   s_list* list_self = (s_list*)self->data.payload;
@@ -2917,7 +2933,7 @@ void list_Push(s_class_instance* ret, s_class_instance* self, s_class_instance**
   list_push(list_self, item);
 }
 
-void list_PrintAll(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+void list_PrintAll(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
   PANALYSIS("list_Push");
 
   s_list* list_self = (s_list*)self->data.payload;
@@ -2933,6 +2949,24 @@ void list_PrintAll(s_class_instance* ret, s_class_instance* self, s_class_instan
   }
 }
 
+void list_Index(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
+  PANALYSIS("list_Index");
+
+  s_number* list_index = (s_number*)args[0]->data.payload;
+  s_list* list_self = (s_list*)self->data.payload;
+
+  uint64_t found_index = list_index->isDecimal ? (uint64_t)list_index->content.decimal : list_index->content.integer;
+
+  s_list_item* l_item = list_get_first(list_self);
+  for (uint64_t idx = 0; idx < list_self->items_count; idx++) {
+    if (idx == found_index) {
+      *ret = (s_class_instance*)l_item->payload;
+      return;
+    }
+
+    l_item = list_get_next(l_item);
+  }
+}
 #pragma endregion ListLIB
 
 
@@ -2972,6 +3006,8 @@ void stdlib_Init(s_compiler *compiler) {
   /* ##### List class ##### */
   class_CreateConstructor(LIB_ListClass, &list_Constructor, 0);
   //class_CreateConstructor(LIB_ListClass, &list_Constructor_List, 1, "List");
+
+  class_CreateMethod(LIB_ListClass, "Index", &list_Index, "Object", 1, "Number");
 
   class_CreateMethod(LIB_ListClass, "Push", &list_Push, NULL, 1, "Object");
   class_CreateMethod(LIB_ListClass, "PrintAll", &list_PrintAll, NULL, 0);

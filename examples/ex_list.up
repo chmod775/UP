@@ -5,10 +5,16 @@ Number {
 }
 
 Main() {
+  n1: Number(3);
   l1: List();
 
   l1.Push(1);
   l1.Push("Hello world!");
+
+  l1[0+ 0   + 0  + 1];
+
+//  item : String => l1[0+ 0   + 0  + 1 + n1];
+//  item.Print();
 
   l1.PrintAll();
 }
