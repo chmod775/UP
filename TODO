@@ -19,10 +19,11 @@ v0.4
   - [x] FOR statement
     + [x] Permit inline variable declaration (ex. 'for (i : Number(0); i < 10; i++)...')
   - [ ] SWITCH statement
-  - [ ] API definition
+  - [ ] List and Dictionary classes
   - [ ] Add Indexer '[]' and Range '..' operators
+
+  - [ ] API definition
   - [ ] Reflections
-  - [ ] Setters / Getters for fields
   - [ ] Method arguments must be sa local field with initialized value from call argument
 
   - [ ] VS-Code and Monaco syntax highlighting
@@ -32,9 +33,9 @@ v0.5
     + Use a list in the global class with all the created instances. If list is not empty pull from that, otherwise create new instance
     + Always call constructor and fields initialization
   - [ ] Generics in classes (like C#)
+  - [ ] Setters / Getters for fields
 
   - [ ] '=>' link operation (like pointers. Copy address and point to class instance. Useful for garbage collection)
-  - [ ] List and Dictionary classes
   - [ ] Try / Catch
   - [ ] Regex (using class ?)
   - [ ] JSON (using class ?)

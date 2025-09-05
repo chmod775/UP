@@ -524,11 +524,53 @@ int parse_Next(s_scope *scope, s_parser *parser) {
           token_val_int = token_val_int*10 + (ch - '0');
           src_advance;
         }
-        if (ch == '.') { // Float type contains a point
-          PERROR("parse_Next", "Missing support for float literal");
-          // src = last_pos;
-          // token_val_decimal = strtod(src, &src);
-          // ret(TOKEN_Literal_Real, token_val_decimal, decimal);
+        if (ch == '.') { // Float: parte frazionaria ed eventuale esponente
+            double val = (double)token_val_int;
+
+            // Consuma il punto
+            src_advance;
+
+            // Parte frazionaria
+            double frac = 0.0;
+            double scale = 1.0;
+            int has_frac = 0;
+            while (ch >= '0' && ch <= '9') {
+                has_frac = 1;
+                frac = frac * 10.0 + (ch - '0');
+                scale *= 10.0;
+                src_advance;
+            }
+            val += (has_frac ? (frac / scale) : 0.0);
+
+            // Esponente (opzionale): e[+/-]?digits
+            if (ch == 'e' || ch == 'E') {
+                src_advance;
+
+                int exp_sign = 1;
+                if (ch == '+' || ch == '-') {
+                    if (ch == '-') exp_sign = -1;
+                    src_advance;
+                }
+
+                int exp_val = 0;
+                int has_exp = 0;
+                while (ch >= '0' && ch <= '9') {
+                    has_exp = 1;
+                    exp_val = exp_val * 10 + (ch - '0');
+                    src_advance;
+                }
+
+                if (!has_exp) {
+                    PERROR("parse_Next", "Malformed float exponent");
+                    /* opzionale: gestione di recovery o fallback */
+                }
+                else {
+                    val = val * pow(10.0, exp_sign * exp_val);
+                }
+            }
+
+            token_val_decimal = val;
+            ret(TOKEN_Literal_Real, token_val_decimal, decimal);
         }
       } else {
         // starts with 0
