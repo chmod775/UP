@@ -40,20 +40,20 @@ void *t_new = NULL;
 
 /* ##### Helpers shit ##### */
 FILE *openFile(char *filename) {
-	PANALYSIS("openFile");
+  PANALYSIS("openFile");
   FILE *ret = fopen(filename, "r");
   if (ret == NULL) PERROR("openFile", "could not open(%s)", filename);
   return ret;
 }
 
 void closeFile(FILE *fd) {
-	PANALYSIS("closeFile");
+  PANALYSIS("closeFile");
   if (fclose(fd) != 0)
     PERROR("closeFile", "could not close file");
 }
 
 int hashOfSymbol(char *str) {
-	PANALYSIS("hashOfSymbol");
+  PANALYSIS("hashOfSymbol");
   if (str == NULL) return 0;
   int hash = *str;
 
@@ -76,7 +76,7 @@ bool startsUnderscore_String(char *str) { return str[0] == '_'; }
 
 /* ##### LINKED LIST ##### */
 s_list *list_create() {
-	PANALYSIS("list_create");
+  PANALYSIS("list_create");
   s_list *ret = NEW(s_list);
   ret->items_count = 0;
   ret->head_item = NULL;
@@ -111,14 +111,14 @@ void list_remove_item(s_list *l, s_list_item *item) {
 #define LIST_READ_NEXT_FAST(L) L->selected_item = L->selected_item->next;
 
 void *list_read_first(s_list *l) {
-	PANALYSIS("list_read_first");
+  PANALYSIS("list_read_first");
   s_list_item *head = l->head_item;
   l->selected_item = head;
   if (l->head_item == NULL) return NULL;
   return l->selected_item->payload;
 }
 void *list_read_last(s_list *l) {
-	PANALYSIS("list_read_last");
+  PANALYSIS("list_read_last");
   s_list_item *head = l->head_item;
   if (l->head_item == NULL) {
     l->selected_item = head;
@@ -130,7 +130,7 @@ void *list_read_last(s_list *l) {
 }
 
 void *list_read_next(s_list *l) {
-	PANALYSIS("list_read_next");
+  PANALYSIS("list_read_next");
   if (l->selected_item == NULL) return NULL;
 
   s_list_item *head = l->head_item;
@@ -144,7 +144,7 @@ void *list_read_next(s_list *l) {
   return l->selected_item->payload;
 }
 void *list_read_previous(s_list *l) {
-	PANALYSIS("list_read_previous");
+  PANALYSIS("list_read_previous");
   if (l->selected_item == NULL) return NULL;
 
   s_list_item *head = l->head_item;
@@ -161,7 +161,7 @@ void *list_read_previous(s_list *l) {
 #define list_read_selected(l) (l->selected_item->payload);
 
 void list_push(s_list *l, void *value) {
-	PANALYSIS("list_push");
+  PANALYSIS("list_push");
   s_list_item *new = NEW(s_list_item);
   new->payload = value;
 
@@ -184,7 +184,7 @@ void list_push(s_list *l, void *value) {
   new->prev = prev;
 }
 void *list_pop(s_list *l) {
-	PANALYSIS("list_pop");
+  PANALYSIS("list_pop");
   s_list_item *head = l->head_item;
   if (head == NULL) PERROR("list_pop", "Empty list.");
   s_list_item *prev = head->prev;
@@ -211,7 +211,7 @@ void *list_pop(s_list *l) {
 
 /* ##### PARENTABLE LINKED LIST ##### */
 s_parlist *parlist_create(s_parlist *parent) {
-	PANALYSIS("parlist_create");
+  PANALYSIS("parlist_create");
   s_parlist *ret = NEW(s_parlist);
 
   ret->lists = list_create();
@@ -234,7 +234,7 @@ s_parlist *parlist_create(s_parlist *parent) {
 }
 /*
 void parlist_destroy(s_parlist *pl) {
-	PANALYSIS("parlist_destroy");
+  PANALYSIS("parlist_destroy");
   void *last = parlist_read_last(pl);
   while (last != NULL) {
     list_destroy(last);
@@ -243,19 +243,19 @@ void parlist_destroy(s_parlist *pl) {
 }
 */
 void *parlist_read_first(s_parlist *pl) {
-	PANALYSIS("parlist_read_first");
+  PANALYSIS("parlist_read_first");
   s_list *l = list_read_first(pl->lists);
   pl->selected_list = l;
   return list_read_first(l);
 }
 void *parlist_read_last(s_parlist *pl) {
-	PANALYSIS("parlist_read_last");
+  PANALYSIS("parlist_read_last");
   s_list *l = list_read_last(pl->lists);
   pl->selected_list = l;
   return list_read_last(l);
 }
 void *parlist_read_next(s_parlist *pl) {
-	PANALYSIS("parlist_read_next");
+  PANALYSIS("parlist_read_next");
   void *ret = list_read_next(pl->selected_list);
 
   if (ret == NULL) {
@@ -269,7 +269,7 @@ void *parlist_read_next(s_parlist *pl) {
   return ret;
 }
 void *parlist_read_previous(s_parlist *pl) {
-	PANALYSIS("parlist_read_previous");
+  PANALYSIS("parlist_read_previous");
   void *ret = list_read_previous(pl->selected_list);
 
   if (ret == NULL) {
@@ -284,20 +284,20 @@ void *parlist_read_previous(s_parlist *pl) {
 }
 /*
 void parlist_add(s_parlist *pl, void *value) {
-	PANALYSIS("parlist_add");
+  PANALYSIS("parlist_add");
   s_list *l = list_read_first(pl->lists);
   list_add(l, value);
 }
 */
 void parlist_push(s_parlist *pl, void *value) {
-	PANALYSIS("parlist_push");
+  PANALYSIS("parlist_push");
   s_list *l = list_read_last(pl->lists);
   list_push(l, value);
 }
 
 /* ##### Symbols ##### */
 char *symbol_GetCleanName(s_symbol *symbol) {
-	PANALYSIS("symbol_GetCleanName");
+  PANALYSIS("symbol_GetCleanName");
   char *ret = (char *)malloc(sizeof(char) * (symbol->length + 1));
   memcpy(ret, symbol->name, symbol->length);
   ret[symbol->length] = 0;
@@ -305,7 +305,7 @@ char *symbol_GetCleanName(s_symbol *symbol) {
 }
 
 s_symbol *symbol_Create(char *name, e_symboltype type, int length) {
-	PANALYSIS("symbol_Create");
+  PANALYSIS("symbol_Create");
   s_symbol *ret = NEW(s_symbol);
 
   ret->hash = hashOfSymbol(name);
@@ -321,7 +321,7 @@ s_symbol *symbol_Create(char *name, e_symboltype type, int length) {
 }
 
 s_symbol *symbol_CreateEmpty(e_symboltype type) {
-	PANALYSIS("symbol_CreateEmpty");
+  PANALYSIS("symbol_CreateEmpty");
   s_symbol *ret = NEW(s_symbol);
 
   ret->hash = 0;
@@ -337,7 +337,7 @@ s_symbol *symbol_CreateEmpty(e_symboltype type) {
 }
 
 s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
-	PANALYSIS("symbol_CreateFromKeyword");
+  PANALYSIS("symbol_CreateFromKeyword");
   s_symbol *ret = symbol_Create(keyword, SYMBOL_KEYWORD, -1);
 
   ret->body.keyword = NEW(s_symbolbody_keyword);
@@ -347,7 +347,7 @@ s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
 }
 
 s_symbol *symbol_Find(char *name, s_parlist *symbols) {
-	PANALYSIS("symbol_Find");
+  PANALYSIS("symbol_Find");
   int hash = hashOfSymbol(name);
   s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(symbols);
   
@@ -372,7 +372,7 @@ bool symbol_Equal(s_symbol *a, s_symbol *b) {
 
 /* ##### Scope ##### */
 s_scope *scope_Create(s_scope *parent) {
-	PANALYSIS("scope_Create");
+  PANALYSIS("scope_Create");
   s_scope *ret = NEW(s_scope);
 
   ret->parent = parent;
@@ -384,7 +384,7 @@ s_scope *scope_Create(s_scope *parent) {
 }
 
 s_scope *scope_CreateAsRoot() {
-	PANALYSIS("scope_CreateAsRoot");
+  PANALYSIS("scope_CreateAsRoot");
   s_scope *ret = scope_Create(NULL);
 
   // Init symbols with base keywords
@@ -403,13 +403,13 @@ s_scope *scope_CreateAsRoot() {
 }
 
 void scope_AddSymbol(s_scope *scope, s_symbol *symbol) {
-	PANALYSIS("scope_AddSymbol");
+  PANALYSIS("scope_AddSymbol");
   parlist_push(scope->symbols, symbol);
 }
 
 char buffer[1000];
 char *scope_Print(s_scope *scope) {
-	PANALYSIS("scope_Print");
+  PANALYSIS("scope_Print");
   char *buffer_ptr = buffer;
 
   s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
@@ -424,7 +424,7 @@ char *scope_Print(s_scope *scope) {
 
 /* ##### Parser ##### */
 s_parser *parse_Init(FILE *file) {
-	PANALYSIS("parse_Init");
+  PANALYSIS("parse_Init");
   s_parser *ret = NEW(s_parser);
 
   ret->file = file;
@@ -436,7 +436,7 @@ s_parser *parse_Init(FILE *file) {
 }
 
 int parse_Next(s_scope *scope, s_parser *parser) {
-	PANALYSIS("parse_Next");
+  PANALYSIS("parse_Next");
   #define src parser->ptr
 
   #define ret(TOKEN, CONTENT, CONTENTTYPE) { ungetc(ch, parser->file); parser->token.content.CONTENTTYPE = (CONTENT); parser->token.type = (TOKEN); return (TOKEN); }
@@ -769,7 +769,7 @@ int parse_Next(s_scope *scope, s_parser *parser) {
 }
 
 int parse_Match(s_scope *scope, s_parser *parser, int token) {
-	PANALYSIS("parse_Match");
+  PANALYSIS("parse_Match");
   if (parser->token.type == token) {
     parse_Next(scope, parser);
   } else {
@@ -782,7 +782,7 @@ int parse_Match(s_scope *scope, s_parser *parser, int token) {
 }
 
 s_token parse_Preview(s_scope *scope, s_parser *parser) {
-	PANALYSIS("parse_Preview");
+  PANALYSIS("parse_Preview");
   uint32_t f_pos = ftell(parser->file);
   
   s_parser _parser = *parser;
@@ -794,7 +794,7 @@ s_token parse_Preview(s_scope *scope, s_parser *parser) {
 
 /* ##### STATEMENT ##### */
 s_statement *statement_Create(s_statement *parent, s_scope *scope, e_statementtype type) {
-	PANALYSIS("statement_Create");
+  PANALYSIS("statement_Create");
   s_statement *ret = NEW(s_statement);
 
   ret->parent = parent;
@@ -807,7 +807,7 @@ s_statement *statement_Create(s_statement *parent, s_scope *scope, e_statementty
 }
 
 s_statement *statement_CreateInside(s_statement *parent, e_statementtype type) {
-	PANALYSIS("statement_CreateInside");
+  PANALYSIS("statement_CreateInside");
   s_statement *ret = NEW(s_statement);
 
   ret->parent = parent;
@@ -820,7 +820,7 @@ s_statement *statement_CreateInside(s_statement *parent, e_statementtype type) {
 }
 
 s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type, s_scope *forcedScope) {
-	PANALYSIS("statement_CreateChildren");
+  PANALYSIS("statement_CreateChildren");
   s_statement *ret = NEW(s_statement);
 
   ret->parent = parent;
@@ -834,7 +834,7 @@ s_statement *statement_CreateChildren(s_statement *parent, e_statementtype type,
 
 
 s_statement *statement_CreateBlock(s_statement *parent) {
-	PANALYSIS("statement_CreateBlock");
+  PANALYSIS("statement_CreateBlock");
   s_statement *ret = statement_CreateChildren(parent, STATEMENT_BLOCK, NULL);
   
   ret->exe_cb = &__core_exe_statement;
@@ -846,7 +846,7 @@ s_statement *statement_CreateBlock(s_statement *parent) {
 }
 
 s_statement *statement_CreateRoot(s_compiler *compiler) {
-	PANALYSIS("statement_CreateRoot");
+  PANALYSIS("statement_CreateRoot");
   // Create a class Statement named "Program"
   s_statement *ret = NEW(s_statement);
 
@@ -855,7 +855,7 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
   ret->exe_cb = NULL;
 
   ret->body.class_def = NEW(s_statementbody_class_def);
-  ret->body.class_def->symbol = class_Create("Program", compiler->rootScope);
+  ret->body.class_def->symbol = class_Create("Program", compiler->rootScope, NULL);
 
   ret->scope = ret->body.class_def->symbol->body.class->scope;
 
@@ -866,7 +866,7 @@ s_statement *statement_CreateRoot(s_compiler *compiler) {
 
 /* ##### Compiler ##### */
 s_compiler *compiler_Init(FILE *file) {
-	PANALYSIS("compiler_Init");
+  PANALYSIS("compiler_Init");
   s_compiler *ret = NEW(s_compiler);
 
   ret->rootScope = scope_CreateAsRoot();
@@ -884,7 +884,7 @@ s_compiler *compiler_Init(FILE *file) {
 }
 
 s_compiler *compiler_InitFromFile(char *filename) {
-	PANALYSIS("compiler_InitFromFile");
+  PANALYSIS("compiler_InitFromFile");
 
   FILE *fd = openFile(filename);
   if (!fd) { PERROR("compiler_InitFromFile", "Error opening file"); return NULL; }
@@ -897,7 +897,7 @@ s_compiler *compiler_InitFromFile(char *filename) {
 }
 
 void compiler_Execute(s_compiler *compiler) {
-	PANALYSIS("compiler_Execute");
+  PANALYSIS("compiler_Execute");
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
   compile_ClassBody(compiler, compiler->rootStatement);
@@ -907,12 +907,12 @@ void compiler_Execute(s_compiler *compiler) {
   s_list *args = list_create();
   s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
 
-	PANALYSIS("compiler_Execute - RUN");
+  PANALYSIS("compiler_Execute - RUN");
   __exe_method(programInstance, mainMethod, NULL, NULL);
 }
 
 void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
-	PANALYSIS("compiler_ExecuteCLI");
+  PANALYSIS("compiler_ExecuteCLI");
   // compiler->parser = parse_Init(code);
 
   // parse_Next(compiler->rootStatement->scope, compiler->parser);
@@ -921,7 +921,7 @@ void compiler_ExecuteCLI(s_compiler *compiler, char *code) {
 }
 
 s_expression_operation *expression_Emit(s_list *core_operations, e_expression_operation_type type) {
-	PANALYSIS("expression_Emit");
+  PANALYSIS("expression_Emit");
   s_expression_operation *op = NEW(s_expression_operation);
   op->type = type;
   list_push(core_operations, op);
@@ -978,7 +978,7 @@ s_expression_operation *expression_MethodCall(s_list *operations, s_method_def *
 }
 
 s_expression_operation *expression_Step(s_compiler *compiler, s_statement *statement, s_scope *scope, s_list *operations, int level) {
-	PANALYSIS("expression_Step");
+  PANALYSIS("expression_Step");
   s_expression_operation *op = NULL;
 
   // Unary operators
@@ -1015,7 +1015,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     string->data.payload = NEW(s_string);
     s_string *str = (s_string *)string->data.payload;
 
-	str->content = NULL;
+  str->content = NULL;
 
     string_resize(str, strlen(token.content.string));
     strcpy((char *)str->content, token.content.string);
@@ -1212,12 +1212,12 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 }
 
 s_statement *compile_Expression(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_Expression");
+  PANALYSIS("compile_Expression");
   return compile_CustomExpression(compiler, parent, NULL, NULL, NULL);
 }
 
 s_statement *compile_CustomExpression(s_compiler *compiler, s_statement *parent, s_list *before_operations, s_list *after_operations, s_expression_operation **ret_operation) {
-	PANALYSIS("compile_CustomExpression");
+  PANALYSIS("compile_CustomExpression");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_EXPRESSION);
 
   ret->exe_cb = &__core_expression;
@@ -1260,11 +1260,15 @@ void class_InitEmpty(s_symbol *class_symbol, s_scope *scope) {
   memset(class_symbol->body.class->operator_methods, 0, sizeof(class_symbol->body.class->operator_methods));
 }
 
-s_symbol *class_Create(char *name, s_scope *scope) {
-	PANALYSIS("class_Create");
+s_symbol *class_Create(char *name, s_scope *scope, s_symbol *parent) {
+  PANALYSIS("class_Create");
   s_symbol *symbol = symbol_Create(name, SYMBOL_CLASS, -1);
 
   class_InitEmpty(symbol, scope_Create(scope));
+
+  if (parent != NULL) {
+    class_DeriveFrom(symbol, parent);
+  }
 
   scope_AddSymbol(scope, symbol);
 
@@ -1418,7 +1422,7 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
 }
 
 s_class_instance *class_CreateInstance(s_symbol *class) {
-	PANALYSIS("class_CreateInstance");
+  PANALYSIS("class_CreateInstance");
   if (class->type != SYMBOL_CLASS) PERROR("class_CreateInstance", "Wrong statement type");
 
   s_class_instance *instance = NEW(s_class_instance);
@@ -1447,6 +1451,78 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
   return instance;
 }
 
+void* class_DeriveFrom(s_symbol* dest, s_symbol* src) {
+  if (src->type != SYMBOL_CLASS) PERROR("class_DeriveFrom", "Source symbol is not a class.");
+  if (dest->type != SYMBOL_CLASS) PERROR("class_DeriveFrom", "Destination symbol is not a class.");
+
+  s_list* l = NULL;
+  s_list_item* l_item = NULL;
+  uint64_t idx;
+
+  s_symbol* class_symbol = dest;
+
+  // Link fields
+  l = src->body.class->fields;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    list_push(class_symbol->body.class->fields, l_item->payload);
+    l_item = list_get_next(l_item);
+  }
+
+  // Link methods
+  l = src->body.class->methods;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    list_push(class_symbol->body.class->methods, l_item->payload);
+    l_item = list_get_next(l_item);
+  }
+
+  // Link constructors
+  l = src->body.class->constructors;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    list_push(class_symbol->body.class->constructors, l_item->payload);
+    l_item = list_get_next(l_item);
+  }
+
+  // Link parent class
+  list_push(class_symbol->body.class->parents, src);
+}
+
+
+bool class_CheckHierarchy(s_symbol* class_A, s_symbol* class_B) {
+  if (class_A->type != SYMBOL_CLASS) PERROR("class_CheckHierarchy", "class_A symbol is not a class.");
+  if (class_B->type != SYMBOL_CLASS) PERROR("class_CheckHierarchy", "class_B symbol is not a class.");
+
+  if (class_A == class_B)
+    return true;
+
+  s_list* l = NULL;
+  s_list_item* l_item = NULL;
+  uint64_t idx;
+
+  bool ret = false;
+
+  l = class_A->body.class->parents;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    if (l_item->payload == class_B) ret = true;
+    l_item = list_get_next(l_item);
+  }
+
+  if (ret)
+    return ret;
+
+  l = class_B->body.class->parents;
+  l_item = list_get_first(l);
+  for (idx = 0; idx < l->items_count; idx++) {
+    if (l_item->payload == class_A) ret = true;
+    l_item = list_get_next(l_item);
+  }
+
+  return ret;
+}
+
 bool method_CheckArgumentTypes(s_method_def *method, s_list *args) {
   s_list_item *pos_MethodArg = list_get_first(method->arguments);
   s_list_item *pos_CallArg = list_get_first(args);
@@ -1459,14 +1535,22 @@ bool method_CheckArgumentTypes(s_method_def *method, s_list *args) {
     s_symbol *callArg_symbol = expression_GetClassOfOperation(callArg_expressionOperation);
     pos_CallArg = list_get_next(pos_CallArg);
 
-    if (methodArg_symbol->body.argument->value.type != callArg_symbol) return false;
+    if ((methodArg_symbol->body.argument->value.type->type == SYMBOL_CLASS) && (callArg_symbol->type == SYMBOL_CLASS)) {
+      bool match = class_CheckHierarchy(methodArg_symbol->body.argument->value.type, callArg_symbol);
+      if (!match)
+        return false;
+    }
+    else {
+      if (methodArg_symbol->body.argument->value.type != callArg_symbol)
+        return false;
+    }
   }
 
   return true;
 }
 
 s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
-	PANALYSIS("method_FindOverload");
+  PANALYSIS("method_FindOverload");
   if (method == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
   if (method->type != SYMBOL_METHOD) PERROR("method_FindOverload", "Symbol is not a Method.");
   if (args == NULL) PERROR("method_FindOverload", "Args cannot be null.");
@@ -1486,9 +1570,9 @@ s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
 }
 
 s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args) {
-	PANALYSIS("class_FindMethodByName");
+  PANALYSIS("class_FindMethodByName");
   if (class == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
-  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol \"%s\" is not a class.", name);
+  if (class->type != SYMBOL_CLASS) PERROR("class_FindMethodByName", "Symbol \"%s\" is not a class.", class->name);
   if (name == NULL) PERROR("class_FindMethodByName", "Name cannot be null.");
 
   s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
@@ -1498,7 +1582,7 @@ s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args) 
 }
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class) {
-	PANALYSIS("compile_ClassBody");
+  PANALYSIS("compile_ClassBody");
   // Only 3 definition statements are allowed in class body
   // 1. field : type = <expression>;
   // 2. method(...) : type { <statement> }
@@ -1528,47 +1612,8 @@ void compile_ClassBody(s_compiler *compiler, s_statement *class) {
   }
 }
 
-void *class_DeriveFrom(s_statement *dest, s_symbol *src) {
-  if (dest->type != STATEMENT_CLASS_DEF) PERROR("class_DeriveFrom", "Destination statement is not a class definition.");
-  if (src->type != SYMBOL_CLASS) PERROR("class_DeriveFrom", "Source symbol is not a class.");
-
-  s_list *l = NULL;
-  s_list_item *l_item = NULL;
-  uint64_t idx;
-
-  s_symbol *class_symbol = dest->body.class_def->symbol;
-
-  // Create sub scope
-  dest->scope = scope_Create(src->body.class->scope);
-  class_symbol->body.class->scope = dest->scope;
-
-  // Link fields
-  l = src->body.class->fields;
-  l_item = list_get_first(l);
-  for (idx = 0; idx < l->items_count; idx++) {
-    list_push(class_symbol->body.class->fields, l_item->payload);
-    l_item = list_get_next(l_item);
-  }
-
-  // Link methods
-  l = src->body.class->methods;
-  l_item = list_get_first(l);
-  for (idx = 0; idx < l->items_count; idx++) {
-    list_push(class_symbol->body.class->methods, l_item->payload);
-    l_item = list_get_next(l_item);
-  }
-
-  // Link constructors
-  l = src->body.class->constructors;
-  l_item = list_get_first(l);
-  for (idx = 0; idx < l->items_count; idx++) {
-    list_push(class_symbol->body.class->constructors, l_item->payload);
-    l_item = list_get_next(l_item);
-  }
-}
-
 s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_ClassDefinition");
+  PANALYSIS("compile_ClassDefinition");
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compiler_ClassDefinition", "Wrong statement for class definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compiler_ClassDefinition", "Wrong parent symbol.");
 
@@ -1603,8 +1648,13 @@ s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_s
   ret->body.class_def = NEW(s_statementbody_class_def);
   ret->body.class_def->symbol = class_symbol;
 
-  if (parent_symbol != NULL)
-    class_DeriveFrom(ret, parent_symbol);
+  if (parent_symbol != NULL) {
+    // Create sub scope
+    ret->scope = scope_Create(parent_symbol->body.class->scope);
+    class_symbol->body.class->scope = ret->scope;
+  
+    class_DeriveFrom(class_symbol, parent_symbol);
+  }
 
   //s_method_def *assign_method = class_CreateMethod(class_symbol, "Assign", &object_Assign, class_symbol->name, 1, class_symbol->name);
   //class_symbol->body.class->operator_methods[TOKEN_Assign - TOKEN_Assign] = assign_method;
@@ -1620,7 +1670,7 @@ s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_s
 
 // ([arg0, arg1, ...]) { <statements> }
 s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_ConstructorMethodDefinition");
+  PANALYSIS("compile_ConstructorMethodDefinition");
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong parent statement for method definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compile_MethodDefinition", "Wrong parent symbol.");
 
@@ -1692,7 +1742,7 @@ s_statement *compile_ConstructorMethodDefinition(s_compiler *compiler, s_stateme
 
 // name([arg0, arg1, ...]) [: <return type>] { <statements> }
 s_statement *compile_MethodDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_MethodDefinition");
+  PANALYSIS("compile_MethodDefinition");
   if (parent->type != STATEMENT_CLASS_DEF) CERROR(compiler, "compile_MethodDefinition", "Wrong parent statement for method definition.");
   if (parent->body.class_def->symbol->type != SYMBOL_CLASS) CERROR(compiler, "compile_MethodDefinition", "Wrong parent symbol.");
 
@@ -1794,7 +1844,7 @@ s_statement *compile_MethodDefinition(s_symbol *symbol, s_compiler *compiler, s_
 }
 
 s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
-	PANALYSIS("compile_FieldType");
+  PANALYSIS("compile_FieldType");
   s_anytype *ret = NULL;
 
   if (token.type == TOKEN_Symbol) {
@@ -1848,7 +1898,7 @@ s_anytype *compile_FieldType(s_compiler *compiler, s_statement *statement) {
 
 
 s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_ArgumentDefinition");
+  PANALYSIS("compile_ArgumentDefinition");
   s_symbol *name = token.content.symbol;
   if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_ArgumentDefinition", "Symbol already defined.");
 
@@ -1879,7 +1929,7 @@ s_statement *compile_ArgumentDefinition(s_compiler *compiler, s_statement *paren
 }
 
 s_statement *compile_FieldDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_FieldDefinition");
+  PANALYSIS("compile_FieldDefinition");
 
   s_symbol *name = symbol;
   if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_FieldDefinition", "Symbol already defined.");
@@ -1907,7 +1957,7 @@ s_statement *compile_FieldDefinition(s_symbol *symbol, s_compiler *compiler, s_s
 }
 
 s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_LocalFieldDefinition");
+  PANALYSIS("compile_LocalFieldDefinition");
 
   s_symbol *name = token.content.symbol;
   if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_LocalFieldDefinition", "Symbol already defined.");
@@ -1944,7 +1994,7 @@ s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *par
 }
 
 s_statement *compile_If(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_If");
+  PANALYSIS("compile_If");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_IF);
   ret->exe_cb = &__core_if;
 
@@ -1959,7 +2009,7 @@ s_statement *compile_If(s_compiler *compiler, s_statement *parent) {
 }
 
 s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_For");
+  PANALYSIS("compile_For");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_FOR);
   ret->exe_cb = &__core_for;
 
@@ -2003,7 +2053,7 @@ s_statement *compile_For(s_compiler *compiler, s_statement *parent) {
 }
 
 s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_While");
+  PANALYSIS("compile_While");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_WHILE);
   ret->exe_cb = &__core_while;
 
@@ -2018,7 +2068,7 @@ s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
 }
 
 s_statement *compile_Debug(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_Debug");
+  PANALYSIS("compile_Debug");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_DEBUG_INFO);
   ret->exe_cb = &__core_debug;
 
@@ -2044,7 +2094,7 @@ s_statement *compile_Debug(s_compiler *compiler, s_statement *parent) {
 }
 
 s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_Breakpoint");
+  PANALYSIS("compile_Breakpoint");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_DEBUG_BREAKPOINT);
   ret->exe_cb = &__core_breakpoint;
 
@@ -2062,7 +2112,7 @@ s_statement *compile_Breakpoint(s_compiler *compiler, s_statement *parent) {
 
 
 s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_GenericDefinition");
+  PANALYSIS("compile_GenericDefinition");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_GENERIC_DEF);
 
   match(ret->scope, TOKEN_Lt);
@@ -2093,7 +2143,7 @@ s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s
 }
 
 s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *parent) {
-	PANALYSIS("compile_DefinitionStatement");
+  PANALYSIS("compile_DefinitionStatement");
   // Definition statements types:
   // 1. field : type = <expression>;
   // 2. method(...) : type { <statement> }
@@ -2144,7 +2194,7 @@ s_statement *compile_DefinitionStatement(s_compiler *compiler, s_statement *pare
 }
 
 s_statement *compile_Statement(s_compiler *compiler, s_statement *parent, bool expect_termination) {
-	PANALYSIS("compile_Statement");
+  PANALYSIS("compile_Statement");
   // Statements types:
   // 1. if (...) <statement> [else <statement>]
   // 2. for (...) <statement>
@@ -2216,17 +2266,17 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent, bool e
 
 /* ##### CORE Libs ##### */
 e_statementend __core_field_def(s_exe_scope exe) {
-	PANALYSIS("__core_field_def");
+  PANALYSIS("__core_field_def");
   return STATEMENT_END_CONTINUE;
 }
 
 e_statementend __core_argument_def(s_exe_scope exe) {
-	PANALYSIS("__core_argument_def");
+  PANALYSIS("__core_argument_def");
   return STATEMENT_END_CONTINUE;
 }
 
 e_statementend __core_local_def(s_exe_scope exe) {
-	PANALYSIS("__core_local_def");
+  PANALYSIS("__core_local_def");
 
   s_list *instances = exe.statement->body.local_def->symbol->body.local->value.instances;
 
@@ -2247,13 +2297,13 @@ e_statementend __core_local_def(s_exe_scope exe) {
 }
 
 e_statementend __core_expression(s_exe_scope exe) {
-	PANALYSIS("__core_expression");
+  PANALYSIS("__core_expression");
   __core_exe_expression(exe);
   return STATEMENT_END_CONTINUE;
 }
 
 e_statementend __core_exe_statement(s_exe_scope exe) {
-	PANALYSIS("__core_exe_statement");
+  PANALYSIS("__core_exe_statement");
   uint64_t pre_stack_ptr = stack.ptr;
 
   e_statementend ret = STATEMENT_END_CONTINUE;
@@ -2302,7 +2352,7 @@ void debug_info_field(char *prefix, s_symbol *symbol) {
 }
 
 e_statementend __core_debug(s_exe_scope exe) {
-	PANALYSIS("__core_debug");
+  PANALYSIS("__core_debug");
 
   s_symbol *symbol = exe.statement->body.debug->symbol;
   char *cleanSymbolName = symbol_GetCleanName(symbol);
@@ -2330,7 +2380,7 @@ e_statementend __core_debug(s_exe_scope exe) {
 }
 
 e_statementend __core_breakpoint(s_exe_scope exe) {
-	PANALYSIS("__core_breakpoint");
+  PANALYSIS("__core_breakpoint");
 
   if (exe.statement->body.debug->comment)
     printf("\033[0;33m\033[1mBREAKPOINT:\033[0m\033[0;33m %s \033[0m(Press ENTER key to continue)\n", exe.statement->body.debug->comment);
@@ -2343,7 +2393,7 @@ e_statementend __core_breakpoint(s_exe_scope exe) {
 }
 
 e_statementend __core_if(s_exe_scope exe) {
-	PANALYSIS("__core_if");
+  PANALYSIS("__core_if");
   if (exe.statement->type != STATEMENT_IF) PERROR("__core_if", "Wrong statement type");
 
   s_statementbody_if *statement_body = exe.statement->body._if;
@@ -2362,7 +2412,7 @@ e_statementend __core_if(s_exe_scope exe) {
 }
 
 e_statementend __core_for(s_exe_scope exe) {
-	PANALYSIS("__core_for");
+  PANALYSIS("__core_for");
   if (exe.statement->type != STATEMENT_FOR) PERROR("__core_for", "Wrong statement type");
 
   s_statementbody_for *statement_body = exe.statement->body._for;
@@ -2399,7 +2449,7 @@ e_statementend __core_for(s_exe_scope exe) {
 }
 
 e_statementend __core_while(s_exe_scope exe) {
-	PANALYSIS("__core_while");
+  PANALYSIS("__core_while");
   if (exe.statement->type != STATEMENT_WHILE) PERROR("__core_while", "Wrong statement type");
 
   s_statementbody_while *statement_body = exe.statement->body._while;
@@ -2420,7 +2470,7 @@ e_statementend __core_while(s_exe_scope exe) {
 }
 
 void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance *return_instance, s_class_instance **args) {
-	PANALYSIS("__exe_method");
+  PANALYSIS("__exe_method");
   if (method->body.type == METHODBODY_STATEMENT) {
     // Map arguments value
     uint64_t arg_index = 0;
@@ -2444,7 +2494,7 @@ void __exe_initializeFieldInInstance(s_class_instance *instance, s_symbol *field
 }
 
 s_class_instance *__core_exe_expression(s_exe_scope exe) {
-	PANALYSIS("__core_exe_expression");
+  PANALYSIS("__core_exe_expression");
   if (exe.statement->type != STATEMENT_EXPRESSION) PERROR("__core_exe_expression", "Wrong statement type");
 
   s_list *operations = exe.statement->body.expression->operations;
@@ -2575,25 +2625,26 @@ s_class_instance *sdk_execute_method(s_class_instance *target, s_method_def *met
 
 /* ##### Generic object LIB ##### */
 void object_Assign(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("object_Assign");
+  PANALYSIS("object_Assign");
 
 }
 
 void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("object_Print");
+  PANALYSIS("object_Print");
 }
 
 void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("object_ToString");
+  PANALYSIS("object_ToString");
 }
 
 /* ##### STDLIB 3rd avenue ##### */
+#pragma region NumberLIB
 void number_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Constructor");
+  PANALYSIS("number_Constructor");
   self->data.payload = NEW(s_number);
 }
 void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Constructor");
+  PANALYSIS("number_Constructor");
   s_number *num_B = (s_number *)args[0]->data.payload;
 
   s_number *new = NEW(s_number);
@@ -2604,7 +2655,7 @@ void number_Constructor_Number(s_class_instance *ret, s_class_instance *self, s_
 }
 
 void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Add_Number");
+  PANALYSIS("number_Add_Number");
 
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
@@ -2627,7 +2678,7 @@ void number_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 }
 
 void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Sub_Number");
+  PANALYSIS("number_Sub_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
   s_number *num_ret = (s_number *)ret->data.payload;
@@ -2651,7 +2702,7 @@ void number_Sub_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 }
 
 void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Mul_Number");
+  PANALYSIS("number_Mul_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
   s_number *num_ret = (s_number *)ret->data.payload;
@@ -2662,20 +2713,20 @@ void number_Mul_Number(s_class_instance *ret, s_class_instance *self, s_class_in
   num_ret->isDecimal = anyDecimal;
 
   if (!num_ret->isDecimal) {
-      num_ret->content.integer = num_self->content.integer * num_B->content.integer;
+    num_ret->content.integer = num_self->content.integer * num_B->content.integer;
   }
   else if (allDecimal) {
-      num_ret->content.decimal = num_self->content.decimal * num_B->content.decimal;
+    num_ret->content.decimal = num_self->content.decimal * num_B->content.decimal;
   }
   else {
-      double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
-      double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
-      num_ret->content.decimal = dec_self * dec_B;
+    double dec_self = num_self->isDecimal ? num_self->content.decimal : (double)num_self->content.integer;
+    double dec_B = num_B->isDecimal ? num_B->content.decimal : (double)num_B->content.integer;
+    num_ret->content.decimal = dec_self * dec_B;
   }
 }
 
 void number_Less_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Less_Number");
+  PANALYSIS("number_Less_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
   s_number *num_ret = (s_number *)ret->data.payload;
@@ -2714,7 +2765,7 @@ void number_Gt_Number(s_class_instance* ret, s_class_instance* self, s_class_ins
 }
 
 void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Assign_Number");
+  PANALYSIS("number_Assign_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
   s_number *num_ret = (s_number *)ret->data.payload;
@@ -2724,7 +2775,7 @@ void number_Assign_Number(s_class_instance *ret, s_class_instance *self, s_class
 }
 
 void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_Print");
+  PANALYSIS("number_Print");
   s_number *num_self = (s_number *)self->data.payload;
   if (num_self->isDecimal)
     printf("%lf\n", num_self->content.decimal);
@@ -2733,7 +2784,7 @@ void number_Print(s_class_instance *ret, s_class_instance *self, s_class_instanc
 }
 
 void number_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("number_ToString");
+  PANALYSIS("number_ToString");
   s_number *num_self = (s_number *)self->data.payload;
 
   s_string *str_ret = (s_string *)ret->data.payload;
@@ -2773,7 +2824,9 @@ void number_Dec(s_class_instance* ret, s_class_instance* self, s_class_instance*
     else
         num_self->content.integer--;
 }
+#pragma endregion NumberLIB
 
+#pragma region StringLIB
 void string_resize(s_string *str, uint64_t len) {
   uint32_t old_blocks = (str->len / STR_ALLOC_BLOCK) + 1;
   uint32_t new_blocks = (len / STR_ALLOC_BLOCK) + 1;
@@ -2788,12 +2841,12 @@ void string_resize(s_string *str, uint64_t len) {
 }
 
 void string_Constructor(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("string_Constructor");
+  PANALYSIS("string_Constructor");
   self->data.payload = NEW(s_string);
   string_resize(self->data.payload, 10);
 }
 void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("string_Constructor");
+  PANALYSIS("string_Constructor");
 
   self->data.payload = NEW(s_string);
   s_string *str_self = (s_string *)self->data.payload;
@@ -2804,7 +2857,7 @@ void string_Constructor_String(s_class_instance *ret, s_class_instance *self, s_
 }
 
 void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("string_Assign_String");
+  PANALYSIS("string_Assign_String");
   s_string *str_self = (s_string *)self->data.payload;
   s_string *str_B = (s_string *)args[0]->data.payload;
 
@@ -2813,7 +2866,7 @@ void string_Assign_String(s_class_instance *ret, s_class_instance *self, s_class
 }
 
 void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("string_Add_String");
+  PANALYSIS("string_Add_String");
   s_string *str_ret = (s_string *)ret->data.payload;
   s_string *str_self = (s_string *)self->data.payload;
   s_string *str_B = (s_string *)args[0]->data.payload;
@@ -2826,7 +2879,7 @@ void string_Add_String(s_class_instance *ret, s_class_instance *self, s_class_in
 }
 
 void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("string_Add_Number");
+  PANALYSIS("string_Add_Number");
 
   s_string *str_ret = (s_string *)ret->data.payload;
   s_string *str_self = (s_string *)self->data.payload;
@@ -2843,17 +2896,55 @@ void string_Add_Number(s_class_instance *ret, s_class_instance *self, s_class_in
 }
 
 void string_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args) {
-	PANALYSIS("string_Print");
+  PANALYSIS("string_Print");
   s_string *str_self = (s_string *)self->data.payload;
   printf("%s\n", str_self->content);
 }
+#pragma endregion StringLIB
+
+#pragma region ListLIB
+void list_Constructor(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+  PANALYSIS("list_Constructor");
+  self->data.payload = list_create();
+}
+
+void list_Push(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+  PANALYSIS("list_Push");
+
+  s_list* list_self = (s_list*)self->data.payload;
+  s_class_instance* item = args[0];
+
+  list_push(list_self, item);
+}
+
+void list_PrintAll(s_class_instance* ret, s_class_instance* self, s_class_instance** args) {
+  PANALYSIS("list_Push");
+
+  s_list* list_self = (s_list*)self->data.payload;
+
+  s_list* t_args = list_create();
+
+  s_list_item* l_item = list_get_first(list_self);
+  for (uint64_t idx = 0; idx < list_self->items_count; idx++) {
+    s_class_instance* item_instance = (s_class_instance *)l_item->payload;
+    s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Print", t_args);
+    __exe_method(item_instance, printMethod, NULL, NULL);
+    l_item = list_get_next(l_item);
+  }
+}
+
+#pragma endregion ListLIB
+
 
 void stdlib_Init(s_compiler *compiler) {
-	PANALYSIS("stdlib_Init");
+  PANALYSIS("stdlib_Init");
 
   /* ##### Primary classes ##### */
-  LIB_NumberClass = class_Create("Number", compiler->rootScope);
-  LIB_StringClass = class_Create("String", compiler->rootScope);
+  LIB_ObjectClass = class_Create("Object", compiler->rootScope, NULL);
+
+  LIB_NumberClass = class_Create("Number", compiler->rootScope, LIB_ObjectClass);
+  LIB_StringClass = class_Create("String", compiler->rootScope, LIB_ObjectClass);
+  LIB_ListClass = class_Create("List", compiler->rootScope, LIB_ObjectClass);
 
   /* ##### Number class ##### */
   class_CreateConstructor(LIB_NumberClass, &number_Constructor, 0);
@@ -2877,6 +2968,13 @@ void stdlib_Init(s_compiler *compiler) {
   class_CreateMethod(LIB_StringClass, "Add", &string_Add_String, "String", 1, "String");
   //class_CreateMethod(LIB_StringClass, "Add", &string_Add_Number, "String", 1, "Number");
   class_CreateMethod(LIB_StringClass, "Print", &string_Print, NULL, 0);
+
+  /* ##### List class ##### */
+  class_CreateConstructor(LIB_ListClass, &list_Constructor, 0);
+  //class_CreateConstructor(LIB_ListClass, &list_Constructor_List, 1, "List");
+
+  class_CreateMethod(LIB_ListClass, "Push", &list_Push, NULL, 1, "Object");
+  class_CreateMethod(LIB_ListClass, "PrintAll", &list_PrintAll, NULL, 0);
 }
 
 

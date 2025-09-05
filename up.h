@@ -594,7 +594,7 @@ struct _s_exe_scope {
 #define EXE_SCOPE(RET,SELF,STATEMENT) (s_exe_scope) { .ret = (RET), .self = (SELF), .statement = (STATEMENT) }
 #define SUB_EXE_SCOPE(EXE,STATEMENT) (s_exe_scope) { .ret = (EXE.ret), .self = (EXE.self), .statement = (STATEMENT) }
 
-s_symbol *class_Create(char *name, s_scope *scope);
+s_symbol *class_Create(char *name, s_scope *scope, s_symbol *parent);
 
 s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
 
@@ -605,6 +605,8 @@ s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args);
 s_class_instance *class_CreateInstance(s_symbol *class);
 
 void *class_DeriveFrom(s_statement *dest, s_symbol *src);
+
+bool class_CheckHierarchy(s_symbol* class_A, s_symbol* class_B);
 
 void compile_ClassBody(s_compiler *compiler, s_statement *class);
 s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_statement *parent);
@@ -660,7 +662,9 @@ typedef struct {
 void string_resize(s_string *str, uint64_t size);
 
 // Required lib classes
+s_symbol* LIB_ObjectClass = NULL;
 s_symbol *LIB_NumberClass = NULL;
-s_symbol *LIB_StringClass = NULL;
+s_symbol* LIB_StringClass = NULL;
+s_symbol *LIB_ListClass = NULL;
 
 #endif

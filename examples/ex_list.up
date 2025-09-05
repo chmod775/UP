@@ -1,0 +1,14 @@
+Number {
+  Print() {
+    this.ToString().Print();
+  }
+}
+
+Main() {
+  l1: List();
+
+  l1.Push(1);
+  l1.Push("Hello world!");
+
+  l1.PrintAll();
+}
