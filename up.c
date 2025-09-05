@@ -1994,14 +1994,24 @@ s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *par
   name->body.local = NEW(s_symbolbody_local);
   name->type = SYMBOL_LOCAL;
 
-  s_expression_operation *ret_op = NULL;
-  name->body.local->init_expression = compile_CustomExpression(compiler, ret, NULL, NULL, &ret_op);
-  name->body.local->value.type = expression_GetClassOfOperation(ret_op);
+  s_token token_link = preview(ret->scope);
+  if (token_link.type == TOKEN_Link) {    
+    s_symbol *type_symbol = token.content.symbol;
+    match(ret->scope, TOKEN_Symbol);
+
+    match(ret->scope, TOKEN_Link);
+
+    name->body.local->value.type = type_symbol;
+
+    s_expression_operation *ret_op = NULL;
+    name->body.local->init_expression = compile_CustomExpression(compiler, ret, NULL, NULL, &ret_op);
+  } else {
+    s_expression_operation *ret_op = NULL;
+    name->body.local->init_expression = compile_CustomExpression(compiler, ret, NULL, NULL, &ret_op);
+    name->body.local->value.type = expression_GetClassOfOperation(ret_op);
+  }
+
   name->body.local->value.instances = list_create();
-
-  //s_class_instance *instance = __core_exe_expression(EXE_SCOPE(NULL, NULL, name->body.local->init_expression));
-  //list_push(name->body.local->value.instances, instance);
-
   if (ret->body.local_def->symbol->body.local->init_expression == NULL) CERROR(compiler, "compile_LocalFieldDefinition", "Field must have an initiliazation value.");
 
   // Push to temporaries list in parent statement (used for garbage collection)
@@ -2551,19 +2561,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       stack_push__s_class_instance_ptr(&stack, exe.self);
     } else if (op->type == OP_Link) {
       s_class_instance *src = stack_pop__s_class_instance_ptr(&stack);
-      s_class_instance *target = stack_pop__s_class_instance_ptr(&stack);
-
-      if (src->class != target->class) PERROR("__core_exe_expression", "Cast not allowed for link.");
-
-      if (target->class->type == SYMBOL_FIELD) {
-        target->data = src->data;
-
-      } else if (target->class->type == SYMBOL_LOCAL) {
-
-      } else {
-        PERROR("__core_exe_expression", "Link to allowed for symbol type.");
-      }
-
+      stack_push__s_class_instance_ptr(&stack, src);
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       // Pop return instance from stack (or create new one in case of constructor)
       s_class_instance *ret = NULL;
@@ -2967,6 +2965,8 @@ void list_Index(s_class_instance **ret, s_class_instance* self, s_class_instance
 
     l_item = list_get_next(l_item);
   }
+
+  PERROR("list_Index", "Index '%d' out of range for List.", found_index);
 }
 #pragma endregion ListLIB
 

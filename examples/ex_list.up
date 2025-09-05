@@ -11,10 +11,14 @@ Main() {
   l1.Push(1);
   l1.Push("Hello world!");
 
-  l1[0+ 0   + 0  + 1];
+  //l1[0+ 0   + 0  + 1];
 
-  item : String => l1[0+ 0   + 0  + 1 + n1];
+  item : String => l1[0+ 0   + 0  + 1];
   item.Print();
+
+  item_2 : Number => l1[0];
+  item_2.Print();
+  item_2++;
 
   l1.PrintAll();
 }
