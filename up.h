@@ -598,15 +598,15 @@ struct _s_exe_scope {
 
 s_symbol *class_Create(char *name, s_scope *scope, s_symbol *parent);
 
-s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
+s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instance **ret, s_class_instance *self, s_class_instance **args), int nArguments, ...);
 
-s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance *ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
+s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class_instance **ret, s_class_instance *self, s_class_instance **args), char *returnType, int nArguments, ...);
 
 s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args);
 
 s_class_instance *class_CreateInstance(s_symbol *class);
 
-void *class_DeriveFrom(s_statement *dest, s_symbol *src);
+void *class_DeriveFrom(s_symbol *dest, s_symbol *src);
 
 bool class_CheckHierarchy(s_symbol* class_A, s_symbol* class_B);
 
@@ -641,9 +641,9 @@ e_statementend __core_debug(s_exe_scope exe);
 e_statementend __core_breakpoint(s_exe_scope exe);
 
 /* ##### Generic object LIB ##### */
-void object_Assign(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
-void object_Print(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
-void object_ToString(s_class_instance *ret, s_class_instance *self, s_class_instance **args);
+void object_Assign(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
+void object_Print(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
+void object_ToString(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
 
 // SDK
 s_class_instance *sdk_class_ExecuteMethod(s_class_instance *target, s_method_def *method);

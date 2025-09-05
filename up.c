@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <stdint.h>
+#include <math.h>
 
 #include "up.h"
 
@@ -2496,7 +2497,7 @@ void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance
       arg = list_read_next(method->arguments);
       arg_index++;
     }
-    e_statementend ret = __core_exe_statement(EXE_SCOPE(return_instance, self, method->body.content.statement));
+    e_statementend ret = __core_exe_statement(EXE_SCOPE((return_instance != NULL) ? *return_instance : NULL, self, method->body.content.statement));
   } else if (method->body.type == METHODBODY_CALLBACK) {
     method->body.content.callback(return_instance, self, args);
   } else {
@@ -2827,11 +2828,11 @@ void number_Inc(s_class_instance **ret, s_class_instance* self, s_class_instance
         num_self->content.integer++;
 }
 
-void number_Dec(s_class_instance *ret, s_class_instance* self, s_class_instance** args) {
+void number_Dec(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Dec");
     s_number* num_self = (s_number*)self->data.payload;
 
-    s_string* str_ret = (s_string*)ret->data.payload;
+    s_string* str_ret = (s_string*)(*ret)->data.payload;
     str_ret->content = NULL;
     string_resize(str_ret, 20);
 

@@ -13,8 +13,8 @@ Main() {
 
   l1[0+ 0   + 0  + 1];
 
-//  item : String => l1[0+ 0   + 0  + 1 + n1];
-//  item.Print();
+  item : String => l1[0+ 0   + 0  + 1 + n1];
+  item.Print();
 
   l1.PrintAll();
 }
