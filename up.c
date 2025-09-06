@@ -401,6 +401,9 @@ s_scope *scope_CreateAsRoot() {
   scope_AddSymbol(ret, symbol_CreateFromKeyword("for", TOKEN_For));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("switch", TOKEN_Switch));
 
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("break", TOKEN_Break));
+  scope_AddSymbol(ret, symbol_CreateFromKeyword("exit", TOKEN_Exit));
+
   scope_AddSymbol(ret, symbol_CreateFromKeyword("this", TOKEN_This));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("return", TOKEN_Return));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("super", TOKEN_Super));
@@ -2136,6 +2139,26 @@ s_statement *compile_While(s_compiler *compiler, s_statement *parent) {
   return ret;
 }
 
+s_statement *compile_Break(s_compiler *compiler, s_statement *parent) {
+  PANALYSIS("compile_Break");
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_BREAK);
+  ret->exe_cb = &__core_break;
+
+  match(ret->scope, TOKEN_Break);
+
+  return ret;
+}
+
+s_statement *compile_Exit(s_compiler *compiler, s_statement *parent) {
+  PANALYSIS("compile_Exit");
+  s_statement *ret = statement_CreateInside(parent, STATEMENT_EXIT);
+  ret->exe_cb = &__core_exit;
+
+  match(ret->scope, TOKEN_Exit);
+
+  return ret;
+}
+
 s_statement *compile_Debug(s_compiler *compiler, s_statement *parent) {
   PANALYSIS("compile_Debug");
   s_statement *ret = statement_CreateInside(parent, STATEMENT_DEBUG_INFO);
@@ -2189,7 +2212,7 @@ s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s
   s_list *generics = list_create();
   while (token.type != TOKEN_Gt) {
     s_symbol *name = token.content.symbol;
-    if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_ArgumentDefinition", "Symbol already defined.");
+    if (name->type != SYMBOL_NOTDEFINED) CERROR(compiler, "compile_GenericDefinition", "Symbol already defined.");
 
     match(ret->scope, TOKEN_Symbol);
 
@@ -2286,6 +2309,10 @@ s_statement *compile_Statement(s_compiler *compiler, s_statement *parent, bool e
     ret = compile_Breakpoint(compiler, parent);
   } else if (token.type == TOKEN_While) {
     ret = compile_While(compiler, parent);
+  } else if (token.type == TOKEN_Break) {
+    ret = compile_Break(compiler, parent);
+  } else if (token.type == TOKEN_Exit) {
+    ret = compile_Exit(compiler, parent);
   } else if (token.type == '{') {
     // Block statement
     match(parent->scope, '{');
@@ -2372,7 +2399,7 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
         s_statement *sub_statement = pos->payload;
         pos = list_get_next(pos);
 
-        __core_exe_statement(SUB_EXE_SCOPE(exe, sub_statement));
+        ret = __core_exe_statement(SUB_EXE_SCOPE(exe, sub_statement));
         if (ret != STATEMENT_END_CONTINUE)
           break;
       }
@@ -2463,12 +2490,21 @@ e_statementend __core_if(s_exe_scope exe) {
   s_statementbody_if *statement_body = exe.statement->body._if;
 
   s_class_instance *check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
+  s_number *result_number = check_result->data.payload;
 
-  if (check_result->data.payload) {
-    e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_true));
+  if (result_number->content.integer) {
+    e_statementend s_ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_true));
+    if (s_ret == STATEMENT_END_BREAK)
+      return STATEMENT_END_CONTINUE;
+    if (s_ret != STATEMENT_END_CONTINUE)
+      return s_ret;
   } else {
     if (statement_body->_false) {
-      e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_false));
+      e_statementend s_ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->_false));
+      if (s_ret == STATEMENT_END_BREAK)
+        return STATEMENT_END_CONTINUE;
+      if (s_ret != STATEMENT_END_CONTINUE)
+        return s_ret;
     }
   }
 
@@ -2495,8 +2531,10 @@ e_statementend __core_for(s_exe_scope exe) {
 
   while (num_result->content.integer) {
     e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
-    if (ret != STATEMENT_END_CONTINUE)
+    if (ret == STATEMENT_END_BREAK)
       break;
+    if (ret != STATEMENT_END_CONTINUE)
+      return ret;
 
     // Step expressions
     s_statement *step_expr = list_read_first(statement_body->step);
@@ -2524,13 +2562,25 @@ e_statementend __core_while(s_exe_scope exe) {
 
   while (num_result->content.integer) {
     e_statementend ret = __core_exe_statement(SUB_EXE_SCOPE(exe, statement_body->loop));
-    if (ret != STATEMENT_END_CONTINUE)
+    if (ret == STATEMENT_END_BREAK)
       break;
+    if (ret != STATEMENT_END_CONTINUE)
+      return ret;
 
     check_result = __core_exe_expression(SUB_EXE_SCOPE(exe, statement_body->check));
   }
 
   return STATEMENT_END_CONTINUE;
+}
+
+e_statementend __core_break(s_exe_scope exe) {
+  PANALYSIS("__core_break");
+  return STATEMENT_END_BREAK;
+}
+
+e_statementend __core_exit(s_exe_scope exe) {
+  PANALYSIS("__core_exit");
+  return STATEMENT_END_EXIT;
 }
 
 void __exe_method(s_class_instance *self, s_method_def *method, s_class_instance **return_instance, s_class_instance **args) {

@@ -143,7 +143,7 @@ typedef enum {
 
   TOKEN_CommentBlock_End, TOKEN_DirectChildren,
 
-  TOKEN_This, TOKEN_Return, TOKEN_Super, TOKEN_Root, 
+  TOKEN_This, TOKEN_Return, TOKEN_Super, TOKEN_Root, TOKEN_Break, TOKEN_Exit,
 
   TOKEN_If, TOKEN_Else, TOKEN_While, TOKEN_For, TOKEN_Switch,
   TOKEN_Assign, TOKEN_Cond, TOKEN_Lor, TOKEN_Lan, TOKEN_Or, TOKEN_Xor, TOKEN_And, TOKEN_Eq, TOKEN_Ne, TOKEN_Lt, TOKEN_Gt, TOKEN_Le, TOKEN_Ge, TOKEN_Shl, TOKEN_Shr, TOKEN_Add, TOKEN_Sub, TOKEN_Mul, TOKEN_Div, TOKEN_Mod, TOKEN_Inc, TOKEN_Dec, TOKEN_Brak,
@@ -224,7 +224,8 @@ typedef enum {
   STATEMENT_IF,
   STATEMENT_FOR,
   STATEMENT_WHILE,
-  STATEMENT_RETURN,
+  STATEMENT_BREAK,
+  STATEMENT_EXIT,
   STATEMENT_FIELD_DEF,
   STATEMENT_ARGUMENT_DEF,
   STATEMENT_LOCAL_DEF,
@@ -235,6 +236,7 @@ typedef enum {
   STATEMENT_EXPRESSION,
   STATEMENT_DEBUG_INFO,
   STATEMENT_DEBUG_BREAKPOINT
+
 } e_statementtype;
 
 typedef enum {
@@ -637,6 +639,9 @@ e_statementend __core_exe_statement(s_exe_scope exe);
 e_statementend __core_if(s_exe_scope exe);
 e_statementend __core_for(s_exe_scope exe);
 e_statementend __core_while(s_exe_scope exe);
+
+e_statementend __core_break(s_exe_scope exe);
+e_statementend __core_exit(s_exe_scope exe);
 
 e_statementend __core_debug(s_exe_scope exe);
 e_statementend __core_breakpoint(s_exe_scope exe);

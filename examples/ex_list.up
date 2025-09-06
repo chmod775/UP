@@ -18,15 +18,27 @@ HelloClass {
 
   () { }
   (set: Number) {
-    this.nn = set;
+    this.nn = set + 1000;
   }
 
 
-  TestN(): HelloClass {
+  TestN(cond: Number): HelloClass {
     return.nn = 123;
-    return => HelloClass(888);
-    exit;
-    return.nn.Print();
+    
+    if (cond < 10) {
+      return => HelloClass(888);
+      "<10".Print();
+      exit;
+      "<10.After".Print();
+    }
+    if (cond > 100) {
+      return => HelloClass(999);
+      ">10".Print();
+      exit;
+      ">10.After".Print();
+    }
+
+    "After".Print();
   }
 
   Print() {
@@ -39,12 +51,15 @@ Main() {
   cc.nn.Print();
   cc.sb.Say();
 
-  c2 : cc.TestN();
+  c2 : cc.TestN(50);
   c2.nn++;
   c2.Print();
 
-  c3 : cc.TestN();
+  c3 : cc.TestN(1);
   c3.Print();
+
+  c30 : cc.TestN(300);
+  c30.Print();
 
   c4 : HelloClass(775);
   c4.Print();
