@@ -42,9 +42,9 @@ typedef struct _s_list_item {
 } s_list_item;
 
 typedef struct {
-  uint64_t items_count;
   s_list_item *head_item;
   s_list_item *selected_item;
+  uint32_t items_count;
 } s_list;
 
 s_list *list_create();
@@ -206,7 +206,7 @@ typedef struct {
 
 typedef struct {
   s_anytype *type;
-  s_list *instances;
+  s_class_instance *instance;
 } s_anyvalue_local;
 
 /* ##### Scope ##### */
@@ -581,6 +581,7 @@ bool method_CheckArgumentTypes(s_method_def *method, s_list *args);
 /* ##### CLASS ##### */
 struct _s_class_instance {
   s_symbol *class;
+  bool is_dynamic_allocated;
   union {
     s_class_instance **fields;
     void *payload;

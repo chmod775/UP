@@ -4,21 +4,84 @@ Number {
   }
 }
 
+SubClass {
+  Say() {
+    "SubClass".Print();
+  }
+
+  () { }
+}
+
+HelloClass {
+  nn: Number(1111);
+  sb: SubClass();
+
+  () { }
+}
+
+Main2() {
+  n1: Number(3);
+  ttt1: n1;
+  ttt2: Number => n1;
+
+  n1.Print();
+  ttt1.Print();
+  ttt2.Print();
+}
+
 Main() {
+  {
+    l2: List();
+    for (j: 0, j < 100, j++) {
+      //j.Print();
+      //l2.Push(Number(j));
+      //l2.Push("ABC_" + String(j.ToString()));
+      l2.Push(String("ABC_"));// + j.ToString()));
+    }
+
+    //l2.PrintAll();
+  }
+
+/*
+
+//  cc : HelloClass();
+//  cc.nn.Print();
+//  cc.sb.Say();
+
   n1: Number(3);
   l1: List();
 
-  l1.Push(1);
-  l1.Push("Hello world!");
+  {
+    ttt1: n1;
+  }
 
-  //l1[0+ 0   + 0  + 1];
+  t1: "A" + "B";
+  t2: "C" + "D";
+  t1.Print();
+  t2.Print();
 
-  item : String => l1[0+ 0   + 0  + 1];
-  item.Print();
+  //l1.Push(1);
+  l1.Push("Hello 1 world!");
+  l1.Push("Hello 2 world!");
+  l1.Push("Hello 3 world!");
+  l1.Push(String("Hello 4 world!") + String("Test"));
 
-  item_2 : Number => l1[0];
-  item_2.Print();
-  item_2++;
+  for (i: 0, i < l1.Length(), i++) {
+    item : String => l1[i];
+    item.Print();
+
+    i.Print();
+  }
+
+//  item : String => l1[0+ 0   + 0  + 1];
+//  item.Print();
+
+//  item_2 : Number => l1[0];
+//  item_2.Print();
+//  item_2++;
 
   l1.PrintAll();
+
+  l1.Length().Print();
+  */
 }

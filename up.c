@@ -85,12 +85,15 @@ s_list *list_create() {
   return ret;
 }
 
+void list_destroy(s_list *list) {
+  while (list_pop(list));
+  free(list);
+}
+
 #define list_get_first(l) (l->head_item);
 #define list_get_next(li) (li->next);
 
 void list_remove_item(s_list *l, s_list_item *item) {
-  l->items_count--;
-
   s_list_item *head = l->head_item;
 
   if (item == head) {
@@ -106,6 +109,8 @@ void list_remove_item(s_list *l, s_list_item *item) {
     item->next = NULL;
     item->prev = NULL;
   }
+
+  if (l->items_count > 0) l->items_count--;
 }
 
 #define LIST_READ_FIRST_FAST(L) L->selected_item = L->head_item;
@@ -187,7 +192,7 @@ void list_push(s_list *l, void *value) {
 void *list_pop(s_list *l) {
   PANALYSIS("list_pop");
   s_list_item *head = l->head_item;
-  if (head == NULL) PERROR("list_pop", "Empty list.");
+  if (head == NULL) return NULL; //PERROR("list_pop", "Empty list.");
   s_list_item *prev = head->prev;
 
   void *ret = NULL;
@@ -252,6 +257,10 @@ void *parlist_read_first(s_parlist *pl) {
 void *parlist_read_last(s_parlist *pl) {
   PANALYSIS("parlist_read_last");
   s_list *l = list_read_last(pl->lists);
+  while (l->items_count == 0) {
+    l = list_read_previous(pl->lists);
+    if (l == NULL) return NULL;
+  }
   pl->selected_list = l;
   return list_read_last(l);
 }
@@ -299,10 +308,7 @@ void parlist_push(s_parlist *pl, void *value) {
 /* ##### Symbols ##### */
 char *symbol_GetCleanName(s_symbol *symbol) {
   PANALYSIS("symbol_GetCleanName");
-  char *ret = (char *)malloc(sizeof(char) * (symbol->length + 1));
-  memcpy(ret, symbol->name, symbol->length);
-  ret[symbol->length] = 0;
-  return ret;
+  return symbol->name;
 }
 
 s_symbol *symbol_Create(char *name, e_symboltype type, int length) {
@@ -350,14 +356,14 @@ s_symbol *symbol_CreateFromKeyword(char *keyword, e_token token) {
 s_symbol *symbol_Find(char *name, s_parlist *symbols) {
   PANALYSIS("symbol_Find");
   int hash = hashOfSymbol(name);
-  s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(symbols);
+  s_symbol *symbol_ptr = (s_symbol *)parlist_read_last(symbols);
   
   while (symbol_ptr != NULL) {
     if (symbol_ptr->hash == hash) {
       if (!memcmp(symbol_ptr->name, name, symbol_ptr->length))
         return symbol_ptr;
     }
-    symbol_ptr = (s_symbol *)parlist_read_next(symbols);
+    symbol_ptr = (s_symbol *)parlist_read_previous(symbols);
   }
 
   return NULL;
@@ -911,6 +917,7 @@ void compiler_Execute(s_compiler *compiler) {
 
   s_list *args = list_create();
   s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
+  list_destroy(args);
 
   PANALYSIS("compiler_Execute - RUN");
   __exe_method(programInstance, mainMethod, NULL, NULL);
@@ -1020,7 +1027,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     string->data.payload = NEW(s_string);
     s_string *str = (s_string *)string->data.payload;
 
-  str->content = NULL;
+    str->content = NULL;
 
     string_resize(str, strlen(token.content.string));
     strcpy((char *)str->content, token.content.string);
@@ -1110,6 +1117,8 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       } else {
         CERROR(compiler, "expression_Step", "Undefined symbol behaviour.");
       }
+
+      list_destroy(args);
     } else { // Symbol access
       if (symbol->type == SYMBOL_CLASS) {
         op = expression_Emit(operations, OP_AccessSymbol);
@@ -1150,6 +1159,18 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
     match(scope, ')');
   } else if (token.type == ',') {
     return NULL;
+  } else if (token.type == TOKEN_Link) {
+    match(scope, TOKEN_Link);
+
+    s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
+
+    s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
+
+    s_class_instance *link_instance = NEW(s_class_instance);
+    link_instance->is_dynamic_allocated = false;
+    op_temporaryDestination->payload.temporary = link_instance;
+
+    op = expression_Emit(operations, OP_Link);
   } else {
     CERROR(compiler, "expression_Step", "Bad expression. Token %d [%c] not found.", token.type, token.type);
     exit(-1);
@@ -1163,19 +1184,14 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
       s_list* args = list_create();
       for (uint8_t i = 0; i < token_operator.args_count; i++) {
-          s_expression_operation* op_arg = expression_Step(compiler, statement, scope, operations, token_operator.sub_token);
-          list_push(args, op_arg);
+        s_expression_operation* op_arg = expression_Step(compiler, statement, scope, operations, token_operator.sub_token);
+        list_push(args, op_arg);
       }
 
       s_method_def *found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
       op = expression_MethodCall(operations, found_methodOverload);
-    } else if (token.type == TOKEN_Link) {
-      match(scope, TOKEN_Link);
-      CERROR(compiler, "expression_Step", "TOKEN_Link to be re-invented before use.");
 
-      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
-
-      op = expression_Emit(operations, OP_Link);
+      list_destroy(args);
     } else if (token.type == TOKEN_Dot) {
       // Descend parent hierarchy
       s_scope *parent_scope = scope;
@@ -1206,7 +1222,8 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       }
 
       match(parent_scope, TOKEN_Dot);
-      op = expression_Step(compiler, statement, parent_scope, operations, TOKEN_Dot);
+      
+      op = expression_Step(compiler, statement, scope, operations, TOKEN_Dot);
     } else if (token.type == TOKEN_Brak) {
       s_token_operator token_operator = token_operators[token.type - TOKEN_Assign];
       match(scope, TOKEN_Brak);
@@ -1219,6 +1236,7 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
 
       s_method_def* found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
       op = expression_MethodCall(operations, found_methodOverload);
+      list_destroy(args);
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1284,7 +1302,12 @@ s_symbol *class_Create(char *name, s_scope *scope, s_symbol *parent) {
   class_InitEmpty(symbol, scope_Create(scope));
 
   if (parent != NULL) {
+    if (parent->type != SYMBOL_CLASS) PERROR("class_Create", "Parent is not a Class.");
+
+    class_InitEmpty(symbol, scope_Create(parent->body.class->scope));
     class_DeriveFrom(symbol, parent);
+  } else {
+    class_InitEmpty(symbol, scope_Create(scope));
   }
 
   scope_AddSymbol(scope, symbol);
@@ -1354,14 +1377,14 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
   if (name == NULL) PERROR("class_CreateMethod", "Name cannot be null.");
 
   s_symbol *symbol_name = symbol_Find(name, class->body.class->scope->symbols);
-  if (symbol_name == NULL) {
+  // if (symbol_name == NULL) {
     // Method symbol not found, create one
     symbol_name = symbol_Create(name, SYMBOL_METHOD, -1);
     symbol_name->body.method = NEW(s_symbolbody_method);
     symbol_name->body.method->overloads = list_create();
     // Add to class scope
     scope_AddSymbol(class->body.class->scope, symbol_name);
-  }
+  // }
   
   if (!symbol_name->isUppercase) PERROR("class_CreateMethod", "Method name must start uppercase.");
 
@@ -1444,6 +1467,7 @@ s_class_instance *class_CreateInstance(s_symbol *class) {
 
   s_class_instance *instance = NEW(s_class_instance);
   instance->class = class;
+  instance->is_dynamic_allocated = false;
 
   // Allocate data space
   if (instance->class->body.class->fields->items_count > 0)
@@ -1593,7 +1617,8 @@ s_method_def *class_FindMethodByName(s_symbol *class, char *name, s_list *args) 
   if (name == NULL) PERROR("class_FindMethodByName", "Name cannot be null.");
 
   s_symbol *found_symbol = symbol_Find(name, class->body.class->scope->symbols);
-  if (found_symbol == NULL) PERROR("class_FindMethodByName", "Symbol \"%s\" does not exists.", name);
+  if (found_symbol == NULL)
+    PERROR("class_FindMethodByName", "Symbol \"%s\" does not exists.", name);
   
   return method_FindOverload(found_symbol, args);
 }
@@ -1999,8 +2024,6 @@ s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *par
     s_symbol *type_symbol = token.content.symbol;
     match(ret->scope, TOKEN_Symbol);
 
-    match(ret->scope, TOKEN_Link);
-
     name->body.local->value.type = type_symbol;
 
     s_expression_operation *ret_op = NULL;
@@ -2011,7 +2034,7 @@ s_statement *compile_LocalFieldDefinition(s_compiler *compiler, s_statement *par
     name->body.local->value.type = expression_GetClassOfOperation(ret_op);
   }
 
-  name->body.local->value.instances = list_create();
+  name->body.local->value.instance = NULL;
   if (ret->body.local_def->symbol->body.local->init_expression == NULL) CERROR(compiler, "compile_LocalFieldDefinition", "Field must have an initiliazation value.");
 
   // Push to temporaries list in parent statement (used for garbage collection)
@@ -2304,22 +2327,7 @@ e_statementend __core_argument_def(s_exe_scope exe) {
 
 e_statementend __core_local_def(s_exe_scope exe) {
   PANALYSIS("__core_local_def");
-
-  s_list *instances = exe.statement->body.local_def->symbol->body.local->value.instances;
-
-  s_class_instance *instance = NULL;
-
-  if (instances->selected_item == NULL)
-    instance = list_read_first(instances);
-  else
-    instance = list_read_next(instances);
-
-  if (instance == NULL) {
-    instance = __core_exe_expression(EXE_SCOPE(NULL, exe.self, exe.statement->body.local_def->symbol->body.local->init_expression));
-    list_push(instances, instance);
-    list_read_last(instances);
-  }
-
+  exe.statement->body.local_def->symbol->body.local->value.instance = __core_exe_expression(EXE_SCOPE(NULL, exe.self, exe.statement->body.local_def->symbol->body.local->init_expression));
   return STATEMENT_END_CONTINUE;
 }
 
@@ -2354,14 +2362,26 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
         ret = exe.statement->exe_cb(exe);
     }
 
+
+    // Handle garbage collection by calling the Destructor
+    s_list* t_args = list_create();
     s_symbol *temp_symbol = list_read_first(exe.statement->temporaries);
     while (temp_symbol != NULL) {
       if (temp_symbol->type != SYMBOL_LOCAL) PERROR("__core_exe_statement", "Symbol is not local.");
 
-      list_read_previous(temp_symbol->body.local->value.instances);
+      if (temp_symbol->body.local->value.type->type == SYMBOL_CLASS) {
+        s_class_instance* item_instance = temp_symbol->body.local->value.instance;
+
+        s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", t_args);
+        __exe_method(item_instance, printMethod, NULL, NULL);
+      }
+
+      // free(temp_symbol->body.local->value.instance);
+      // temp_symbol->body.local->value.instance = NULL;
 
       temp_symbol = list_read_next(exe.statement->temporaries);
     }
+    list_destroy(t_args);
   }
 
   stack.ptr = pre_stack_ptr;
@@ -2542,7 +2562,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       if (op->payload.symbol->type == SYMBOL_ARGUMENT) {
         value = op->payload.symbol->body.argument->value.data;
       } else if (op->payload.symbol->type == SYMBOL_LOCAL) {
-        value = (s_class_instance *)list_read_selected(op->payload.symbol->body.local->value.instances);
+        value = op->payload.symbol->body.local->value.instance;
       } else {
         PERROR("__core_exe_expression", "Access symbol not allowed.");
       }
@@ -2561,6 +2581,9 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
       stack_push__s_class_instance_ptr(&stack, exe.self);
     } else if (op->type == OP_Link) {
       s_class_instance *src = stack_pop__s_class_instance_ptr(&stack);
+      s_class_instance *dest = stack_pop__s_class_instance_ptr(&stack);
+      src->class = dest->class;
+      src->data = dest->data;
       stack_push__s_class_instance_ptr(&stack, src);
     } else if ((op->type == OP_MethodCall) || (op->type == OP_ConstructorCall)) {
       // Pop return instance from stack (or create new one in case of constructor)
@@ -2584,6 +2607,7 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
         }
       } else if (op->type == OP_ConstructorCall) {
         ret = class_CreateInstance(op->payload.method->ret_type);
+        ret->is_dynamic_allocated = true;
 
         // Search default constructor
         // TODO: Pre-find default constructor of class for speed optmizzation
@@ -2650,6 +2674,37 @@ void object_Print(s_class_instance **ret, s_class_instance *self, s_class_instan
 
 void object_ToString(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
   PANALYSIS("object_ToString");
+}
+
+void object_Destructor(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
+  PANALYSIS("object_Destructor");
+
+  if (self->is_dynamic_allocated) {
+    s_list *fields = self->class->body.class->fields;
+
+    s_list* t_args = list_create();
+
+    uint64_t symbol_index = 0;
+    s_symbol *field_item = list_read_first(fields);
+    while (field_item != NULL) {
+      s_class_instance* item_instance = self->data.fields[symbol_index];
+
+      s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", t_args);
+      __exe_method(item_instance, printMethod, NULL, NULL);
+
+      symbol_index++;
+      field_item = list_read_next(fields);
+    }
+
+    list_destroy(t_args);
+
+    if (self->data.payload != NULL) {
+      free(self->data.payload);
+      self->data.payload = NULL;
+    }
+  }
+
+  s_class_instance *a = self;
 }
 
 /* ##### STDLIB 3rd avenue ##### */
@@ -2816,10 +2871,6 @@ void number_Inc(s_class_instance **ret, s_class_instance* self, s_class_instance
     PANALYSIS("number_Inc");
     s_number* num_self = (s_number*)self->data.payload;
 
-    s_string* str_ret = (s_string*)(*ret)->data.payload;
-    str_ret->content = NULL;
-    string_resize(str_ret, 20);
-
     if (num_self->isDecimal)
         num_self->content.decimal++;
     else
@@ -2829,10 +2880,6 @@ void number_Inc(s_class_instance **ret, s_class_instance* self, s_class_instance
 void number_Dec(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
     PANALYSIS("number_Dec");
     s_number* num_self = (s_number*)self->data.payload;
-
-    s_string* str_ret = (s_string*)(*ret)->data.payload;
-    str_ret->content = NULL;
-    string_resize(str_ret, 20);
 
     if (num_self->isDecimal)
         num_self->content.decimal--;
@@ -2849,7 +2896,8 @@ void string_resize(s_string *str, uint64_t len) {
   str->len = len;
 
   if ((old_blocks < new_blocks) || (str->content == NULL)) {
-    free(str->content);
+    if (str->content != NULL)
+      free(str->content);
     str->content = (char *)malloc(new_blocks * STR_ALLOC_BLOCK);
     memset(str->content, 0, new_blocks * STR_ALLOC_BLOCK);
   }
@@ -2915,6 +2963,20 @@ void string_Print(s_class_instance **ret, s_class_instance *self, s_class_instan
   s_string *str_self = (s_string *)self->data.payload;
   printf("%s\n", str_self->content);
 }
+
+void string_Destructor(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
+  PANALYSIS("string_Destructor");
+  s_string *str_self = (s_string *)self->data.payload;
+
+  if (self->is_dynamic_allocated) {
+    if (str_self != NULL) {
+      free(str_self->content);
+      free(str_self);
+      str_self = NULL;
+    }
+  }
+}
+
 #pragma endregion StringLIB
 
 #pragma region ListLIB
@@ -2946,6 +3008,8 @@ void list_PrintAll(s_class_instance **ret, s_class_instance* self, s_class_insta
     __exe_method(item_instance, printMethod, NULL, NULL);
     l_item = list_get_next(l_item);
   }
+
+  list_destroy(t_args);
 }
 
 void list_Index(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
@@ -2968,6 +3032,36 @@ void list_Index(s_class_instance **ret, s_class_instance* self, s_class_instance
 
   PERROR("list_Index", "Index '%d' out of range for List.", found_index);
 }
+
+void list_Length(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
+  PANALYSIS("list_Length");
+  s_list* list_self = (s_list*)self->data.payload;
+  s_number *num_ret = (s_number *)(*ret)->data.payload;
+
+  num_ret->isDecimal = false;
+  num_ret->content.integer = list_self->items_count;
+}
+
+void list_Destructor(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
+  PANALYSIS("list_Destructor");
+
+  s_list* list_self = (s_list*)self->data.payload;
+  s_list* t_args = list_create();
+
+  s_list_item* l_item = list_get_first(list_self);
+  for (uint64_t idx = 0; idx < list_self->items_count; idx++) {
+    s_class_instance *item_instance = (s_class_instance*)l_item->payload;;
+
+    if (item_instance->is_dynamic_allocated) {
+      s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", t_args);
+      __exe_method(item_instance, printMethod, NULL, NULL);
+    }
+
+    l_item = list_get_next(l_item);
+  }
+
+  list_destroy(t_args);
+}
 #pragma endregion ListLIB
 
 
@@ -2976,6 +3070,7 @@ void stdlib_Init(s_compiler *compiler) {
 
   /* ##### Primary classes ##### */
   LIB_ObjectClass = class_Create("Object", compiler->rootScope, NULL);
+  class_CreateMethod(LIB_ObjectClass, "Destructor", &object_Destructor, NULL, 0);
 
   LIB_NumberClass = class_Create("Number", compiler->rootScope, LIB_ObjectClass);
   LIB_StringClass = class_Create("String", compiler->rootScope, LIB_ObjectClass);
@@ -2998,6 +3093,7 @@ void stdlib_Init(s_compiler *compiler) {
   /* ##### String class ##### */
   class_CreateConstructor(LIB_StringClass, &string_Constructor, 0);
   class_CreateConstructor(LIB_StringClass, &string_Constructor_String, 1, "String");
+  class_CreateMethod(LIB_StringClass, "Destructor", &string_Destructor, NULL, 0);
 
   class_CreateMethod(LIB_StringClass, "Assign", &string_Assign_String, "String", 1, "String");
   class_CreateMethod(LIB_StringClass, "Add", &string_Add_String, "String", 1, "String");
@@ -3010,8 +3106,11 @@ void stdlib_Init(s_compiler *compiler) {
 
   class_CreateMethod(LIB_ListClass, "Index", &list_Index, "Object", 1, "Number");
 
+  class_CreateMethod(LIB_ListClass, "Length", &list_Length, "Number", 0);
+
   class_CreateMethod(LIB_ListClass, "Push", &list_Push, NULL, 1, "Object");
   class_CreateMethod(LIB_ListClass, "PrintAll", &list_PrintAll, NULL, 0);
+  class_CreateMethod(LIB_ListClass, "Destructor", &list_Destructor, NULL, 0);
 }
 
 
