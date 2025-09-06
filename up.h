@@ -341,7 +341,7 @@ struct _s_statement {
 };
 
 /* ##### Symbols ##### */
-typedef enum {
+typedef enum __attribute__((packed)) {
   SYMBOL_NOTDEFINED,
   SYMBOL_KEYWORD,
   SYMBOL_FIELD,
@@ -409,10 +409,10 @@ typedef union {
   s_symbolbody_generic *generic;
 } u_symbolbody;
 
-typedef struct _s_symbol {
+typedef struct __attribute__((packed)) _s_symbol {
   int hash;
   char *name;
-  int length;
+  uint8_t length;
 
   bool isUppercase;
   bool isFullcase;
@@ -504,7 +504,7 @@ s_statement *compile_GenericDefinition(s_symbol *symbol, s_compiler *compiler, s
 
 
 /* ##### Expression ##### */
-typedef enum {
+typedef enum __attribute__((packed)) {
   OP_NULL = 0x00,
   OP_LoadSymbol,
   OP_ConstructorCall,

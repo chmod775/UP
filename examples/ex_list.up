@@ -46,7 +46,10 @@ HelloClass {
   }
 }
 
-Main() {
+
+
+
+Main10() {
   cc : HelloClass();
   cc.nn.Print();
   cc.sb.Say();
@@ -64,6 +67,10 @@ Main() {
   c4 : HelloClass(775);
   c4.Print();
 
+}
+
+Main() {
+  this.Main10();
 }
 
 Main2() {

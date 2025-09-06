@@ -3212,6 +3212,7 @@ int main(int argc, char **argv) {
 
   fclose(fanalysis);
 
-  // scanf("Press any KEY to exit");
+  printf("Size of s_symbol: %d\n", sizeof(s_expression_operation));
+  scanf("Press any KEY to exit");
   return 0;
 }
