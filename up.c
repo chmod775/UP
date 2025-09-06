@@ -395,7 +395,6 @@ s_scope *scope_CreateAsRoot() {
   s_scope *ret = scope_Create(NULL);
 
   // Init symbols with base keywords
-  scope_AddSymbol(ret, symbol_CreateFromKeyword("NULL", TOKEN_NULL));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("if", TOKEN_If));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("else", TOKEN_Else));
   scope_AddSymbol(ret, symbol_CreateFromKeyword("while", TOKEN_While));
@@ -915,9 +914,7 @@ void compiler_Execute(s_compiler *compiler) {
 
   s_class_instance *programInstance = class_CreateInstance(compiler->rootStatement->body.class_def->symbol);
 
-  s_list *args = list_create();
-  s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", args);
-  list_destroy(args);
+  s_method_def *mainMethod = class_FindMethodByName(compiler->rootStatement->body.class_def->symbol, "Main", NULL);
 
   PANALYSIS("compiler_Execute - RUN");
   __exe_method(programInstance, mainMethod, NULL, NULL);
@@ -981,6 +978,16 @@ s_expression_operation *expression_MethodCall(s_list *operations, s_method_def *
     s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
     s_class_instance *new_returnInstance = class_CreateInstance(method->ret_type);
     op_temporaryDestination->payload.temporary = new_returnInstance;
+
+    s_method_def *found_constructor = list_read_first(method->ret_type->body.class->constructors);
+    while (found_constructor != NULL) {
+      if (found_constructor->arguments->items_count == 0)
+        break;
+      found_constructor = list_read_next(method->ret_type->body.class->constructors);
+    }
+
+    if (found_constructor != NULL)
+      __exe_method(new_returnInstance, found_constructor, &new_returnInstance, NULL);
   }
 
   s_expression_operation *ret = expression_Emit(operations, OP_MethodCall);
@@ -1162,13 +1169,12 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
   } else if (token.type == TOKEN_Link) {
     match(scope, TOKEN_Link);
 
-    s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
-
     s_expression_operation *op_temporaryDestination = expression_Emit(operations, OP_UseTemporaryInstance);
-
     s_class_instance *link_instance = NEW(s_class_instance);
     link_instance->is_dynamic_allocated = false;
     op_temporaryDestination->payload.temporary = link_instance;
+
+    s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
 
     op = expression_Emit(operations, OP_Link);
   } else {
@@ -1237,6 +1243,12 @@ s_expression_operation *expression_Step(s_compiler *compiler, s_statement *state
       s_method_def* found_methodOverload = expression_FindMethodOverloadInOperation(op, token_operator.method_name, args);
       op = expression_MethodCall(operations, found_methodOverload);
       list_destroy(args);
+    } else if (token.type == TOKEN_Link) {
+      match(scope, TOKEN_Link);
+
+      s_expression_operation *op_arg = expression_Step(compiler, statement, scope, operations, TOKEN_Cond);
+
+      op = expression_Emit(operations, OP_Link);
     } else {
       CERROR(compiler, "expression_Step", "Compiler error");
       exit(-1);
@@ -1594,13 +1606,20 @@ s_method_def *method_FindOverload(s_symbol *method, s_list *args) {
   PANALYSIS("method_FindOverload");
   if (method == NULL) PERROR("method_FindOverload", "Symbol cannot be null.");
   if (method->type != SYMBOL_METHOD) PERROR("method_FindOverload", "Symbol is not a Method.");
-  if (args == NULL) PERROR("method_FindOverload", "Args cannot be null.");
+
+  uint32_t args_count = (args != NULL) ? args->items_count : 0;
 
   s_method_def *found_overload = list_read_first(method->body.method->overloads);
   while (found_overload != NULL) {
-    if (found_overload->arguments->items_count == args->items_count)
-      if (method_CheckArgumentTypes(found_overload, args))
+    if (found_overload->arguments->items_count == args_count) {
+      if (args_count == 0) {
         break;
+      } else {
+        if (method_CheckArgumentTypes(found_overload, args))
+          break;
+      }
+    }
+
     found_overload = list_read_next(method->body.method->overloads);
   }
 
@@ -2364,7 +2383,6 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
 
 
     // Handle garbage collection by calling the Destructor
-    s_list* t_args = list_create();
     s_symbol *temp_symbol = list_read_first(exe.statement->temporaries);
     while (temp_symbol != NULL) {
       if (temp_symbol->type != SYMBOL_LOCAL) PERROR("__core_exe_statement", "Symbol is not local.");
@@ -2372,7 +2390,7 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
       if (temp_symbol->body.local->value.type->type == SYMBOL_CLASS) {
         s_class_instance* item_instance = temp_symbol->body.local->value.instance;
 
-        s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", t_args);
+        s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", NULL);
         __exe_method(item_instance, printMethod, NULL, NULL);
       }
 
@@ -2381,7 +2399,6 @@ e_statementend __core_exe_statement(s_exe_scope exe) {
 
       temp_symbol = list_read_next(exe.statement->temporaries);
     }
-    list_destroy(t_args);
   }
 
   stack.ptr = pre_stack_ptr;
@@ -2580,8 +2597,8 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
     } else if (op->type == OP_LoadThis) {
       stack_push__s_class_instance_ptr(&stack, exe.self);
     } else if (op->type == OP_Link) {
-      s_class_instance *src = stack_pop__s_class_instance_ptr(&stack);
       s_class_instance *dest = stack_pop__s_class_instance_ptr(&stack);
+      s_class_instance *src = stack_pop__s_class_instance_ptr(&stack);
       src->class = dest->class;
       src->data = dest->data;
       stack_push__s_class_instance_ptr(&stack, src);
@@ -2595,31 +2612,31 @@ s_class_instance *__core_exe_expression(s_exe_scope exe) {
 
           // Search default constructor
           // TODO: Pre-find default constructor of class for speed optmizzation
-          s_method_def *found_constructor = list_read_first(ret->class->body.class->constructors);
-          while (found_constructor != NULL) {
-            if (found_constructor->arguments->items_count == 0)
-              break;
-            found_constructor = list_read_next(ret->class->body.class->constructors);
-          }
+          // s_method_def *found_constructor = list_read_first(ret->class->body.class->constructors);
+          // while (found_constructor != NULL) {
+          //   if (found_constructor->arguments->items_count == 0)
+          //     break;
+          //   found_constructor = list_read_next(ret->class->body.class->constructors);
+          // }
 
-          if (found_constructor != NULL)
-            __exe_method(ret, found_constructor, &ret, args);
+          // if (found_constructor != NULL)
+          //   __exe_method(ret, found_constructor, &ret, args);
         }
       } else if (op->type == OP_ConstructorCall) {
         ret = class_CreateInstance(op->payload.method->ret_type);
         ret->is_dynamic_allocated = true;
 
-        // Search default constructor
-        // TODO: Pre-find default constructor of class for speed optmizzation
-        s_method_def *found_constructor = list_read_first(ret->class->body.class->constructors);
-        while (found_constructor != NULL) {
-          if (found_constructor->arguments->items_count == 0)
-            break;
-          found_constructor = list_read_next(ret->class->body.class->constructors);
-        }
+        // // Search default constructor
+        // // TODO: Pre-find default constructor of class for speed optmizzation
+        // s_method_def *found_constructor = list_read_first(ret->class->body.class->constructors);
+        // while (found_constructor != NULL) {
+        //   if (found_constructor->arguments->items_count == 0)
+        //     break;
+        //   found_constructor = list_read_next(ret->class->body.class->constructors);
+        // }
 
-        if (found_constructor != NULL)
-          __exe_method(ret, found_constructor, &ret, args);
+        // if (found_constructor != NULL)
+        //   __exe_method(ret, found_constructor, &ret, args);
       }
 
       // Pop arguments from stack
@@ -2682,29 +2699,25 @@ void object_Destructor(s_class_instance **ret, s_class_instance *self, s_class_i
   if (self->is_dynamic_allocated) {
     s_list *fields = self->class->body.class->fields;
 
-    s_list* t_args = list_create();
-
     uint64_t symbol_index = 0;
     s_symbol *field_item = list_read_first(fields);
     while (field_item != NULL) {
       s_class_instance* item_instance = self->data.fields[symbol_index];
 
-      s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", t_args);
+      s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", NULL);
       __exe_method(item_instance, printMethod, NULL, NULL);
 
       symbol_index++;
       field_item = list_read_next(fields);
     }
 
-    list_destroy(t_args);
-
     if (self->data.payload != NULL) {
       free(self->data.payload);
       self->data.payload = NULL;
     }
-  }
 
-  s_class_instance *a = self;
+    free(self);
+  }
 }
 
 /* ##### STDLIB 3rd avenue ##### */
@@ -2838,7 +2851,6 @@ void number_Assign_Number(s_class_instance **ret, s_class_instance *self, s_clas
   PANALYSIS("number_Assign_Number");
   s_number *num_B = (s_number *)args[0]->data.payload;
   s_number *num_self = (s_number *)self->data.payload;
-  s_number *num_ret = (s_number *)(*ret)->data.payload;
 
   num_self->isDecimal = num_B->isDecimal;
   num_self->content = num_B->content;
@@ -2858,7 +2870,6 @@ void number_ToString(s_class_instance **ret, s_class_instance *self, s_class_ins
   s_number *num_self = (s_number *)self->data.payload;
 
   s_string *str_ret = (s_string *)(*ret)->data.payload;
-  str_ret->content = NULL;
   string_resize(str_ret, 20);
 
   if (num_self->isDecimal)
@@ -2972,6 +2983,7 @@ void string_Destructor(s_class_instance **ret, s_class_instance *self, s_class_i
     if (str_self != NULL) {
       free(str_self->content);
       free(str_self);
+      free(self);
       str_self = NULL;
     }
   }
@@ -2999,17 +3011,13 @@ void list_PrintAll(s_class_instance **ret, s_class_instance* self, s_class_insta
 
   s_list* list_self = (s_list*)self->data.payload;
 
-  s_list* t_args = list_create();
-
   s_list_item* l_item = list_get_first(list_self);
   for (uint64_t idx = 0; idx < list_self->items_count; idx++) {
     s_class_instance* item_instance = (s_class_instance *)l_item->payload;
-    s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Print", t_args);
+    s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Print", NULL);
     __exe_method(item_instance, printMethod, NULL, NULL);
     l_item = list_get_next(l_item);
   }
-
-  list_destroy(t_args);
 }
 
 void list_Index(s_class_instance **ret, s_class_instance* self, s_class_instance** args) {
@@ -3046,21 +3054,32 @@ void list_Destructor(s_class_instance **ret, s_class_instance *self, s_class_ins
   PANALYSIS("list_Destructor");
 
   s_list* list_self = (s_list*)self->data.payload;
-  s_list* t_args = list_create();
 
+  s_class_instance* l_item = list_pop(list_self);
+  while (l_item != NULL) {
+    if (l_item->is_dynamic_allocated) {
+      s_method_def* printMethod = class_FindMethodByName(l_item->class, "Destructor", NULL);
+      __exe_method(l_item, printMethod, NULL, NULL);
+    }
+
+    l_item = list_pop(list_self);
+  }
+/*
   s_list_item* l_item = list_get_first(list_self);
   for (uint64_t idx = 0; idx < list_self->items_count; idx++) {
-    s_class_instance *item_instance = (s_class_instance*)l_item->payload;;
+    s_class_instance *item_instance = (s_class_instance*)l_item->payload;
 
     if (item_instance->is_dynamic_allocated) {
-      s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", t_args);
+      s_method_def* printMethod = class_FindMethodByName(item_instance->class, "Destructor", NULL);
       __exe_method(item_instance, printMethod, NULL, NULL);
     }
 
+    s_list_item* prev_item = l_item;
     l_item = list_get_next(l_item);
+    free(prev_item);
   }
-
-  list_destroy(t_args);
+*/
+  free(list_self);
 }
 #pragma endregion ListLIB
 
@@ -3143,6 +3162,6 @@ int main(int argc, char **argv) {
 
   fclose(fanalysis);
 
-  scanf("Press any KEY to exit");
+  // scanf("Press any KEY to exit");
   return 0;
 }

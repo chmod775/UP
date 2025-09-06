@@ -17,6 +17,38 @@ HelloClass {
   sb: SubClass();
 
   () { }
+  (set: Number) {
+    this.nn = set;
+  }
+
+
+  TestN(): HelloClass {
+    return.nn = 123;
+    return => HelloClass(888);
+    exit;
+    return.nn.Print();
+  }
+
+  Print() {
+    this.nn.Print();
+  }
+}
+
+Main() {
+  cc : HelloClass();
+  cc.nn.Print();
+  cc.sb.Say();
+
+  c2 : cc.TestN();
+  c2.nn++;
+  c2.Print();
+
+  c3 : cc.TestN();
+  c3.Print();
+
+  c4 : HelloClass(775);
+  c4.Print();
+
 }
 
 Main2() {
@@ -29,17 +61,17 @@ Main2() {
   ttt2.Print();
 }
 
-Main() {
+Main3() {
   {
     l2: List();
-    for (j: 0, j < 100, j++) {
+    for (j: 0, j < 100000, j++) {
       //j.Print();
       //l2.Push(Number(j));
       //l2.Push("ABC_" + String(j.ToString()));
-      l2.Push(String("ABC_"));// + j.ToString()));
+      l2.Push("ABC_" + j.ToString());
     }
 
-    //l2.PrintAll();
+    l2.PrintAll();
   }
 
 /*

@@ -3,7 +3,6 @@ Number {
     this.ToString().Print();
   }
   (str: String) {
-    this = 999;
   }
 }
 
@@ -139,7 +138,7 @@ Main() {
   //l4 : Number(345);
   l4 : l3;
 
-  l5 : Number("345");
+  l5 : Number(345);
 
 /*
 	this.Prova();
