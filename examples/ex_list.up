@@ -4,7 +4,12 @@ Number {
   }
 }
 
+Test() {
+  "Test".Print();
+}
+
 SubClass {
+  ppp: String("HelloPPP");
   Say() {
     "SubClass".Print();
   }
@@ -43,6 +48,7 @@ HelloClass {
 
   Print() {
     this.nn.Print();
+    this.Test();
   }
 }
 
@@ -67,10 +73,28 @@ Main10() {
   c4 : HelloClass(775);
   c4.Print();
 
+  //r1 : Number => c4.Field("nn");
+  //r1.Print();
 }
 
 Main() {
-  this.Main10();
+
+  c4 : HelloClass(775);
+  r1 : Number => c4.Field("nn");
+  sb1 : SubClass => c4.Field("sb");
+  r1.Print();
+
+  sb1.Say();
+
+  ppp2 : String => c4.Field("sb").Field("ppp");
+  ppp1 : String => sb1.Field("ppp");
+  ppp1.Print();
+  ppp2.Print();
+
+  c4.Print();
+
+  //this.Main10();
+
 }
 
 Main2() {
@@ -83,7 +107,7 @@ Main2() {
   ttt2.Print();
 }
 
-Main3() {
+Main13() {
   {
     l2: List();
     for (j: 0, j < 100000, j++) {

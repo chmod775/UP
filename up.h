@@ -651,6 +651,9 @@ void object_Assign(s_class_instance **ret, s_class_instance *self, s_class_insta
 void object_Print(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
 void object_ToString(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
 
+void object_Destructor(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
+void object_Field(s_class_instance **ret, s_class_instance *self, s_class_instance **args);
+
 // SDK
 s_class_instance *sdk_class_ExecuteMethod(s_class_instance *target, s_method_def *method);
 

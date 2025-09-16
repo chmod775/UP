@@ -416,19 +416,14 @@ void scope_AddSymbol(s_scope *scope, s_symbol *symbol) {
   parlist_push(scope->symbols, symbol);
 }
 
-char buffer[1000];
 char *scope_Print(s_scope *scope) {
   PANALYSIS("scope_Print");
-  char *buffer_ptr = buffer;
 
   s_symbol *symbol_ptr = (s_symbol *)parlist_read_first(scope->symbols);
   while (symbol_ptr != NULL) {
-    int len = sprintf(buffer_ptr, "%s - %d,", symbol_GetCleanName(symbol_ptr), symbol_ptr->type);
-    buffer_ptr += len;
+    int len = printf("%s - %d\n", symbol_GetCleanName(symbol_ptr), symbol_ptr->type);
     symbol_ptr = (s_symbol *)parlist_read_next(scope->symbols);
   }
-
-  return buffer;
 }
 
 /* ##### Parser ##### */
@@ -911,6 +906,9 @@ s_compiler *compiler_InitFromFile(char *filename) {
 
 void compiler_Execute(s_compiler *compiler) {
   PANALYSIS("compiler_Execute");
+  class_CreateMethod(compiler->rootStatement->body.class_def->symbol, "Field", &object_Field, "Program", 1, "String");
+  class_CreateMethod(compiler->rootStatement->body.class_def->symbol, "Destructor", &object_Destructor, NULL, 0);
+
   parse_Next(compiler->rootStatement->scope, compiler->parser);
 
   compile_ClassBody(compiler, compiler->rootStatement);
@@ -1357,7 +1355,8 @@ s_method_def *class_CreateConstructor(s_symbol *class, void (*cb)(s_class_instan
       hash = hash * 147 + 255;
     } else {
       s_symbol *symbol_argumentType = symbol_Find(typeClassName, class->body.class->scope->symbols);
-      if (symbol_argumentType == NULL) PERROR("class_CreateConstructor", "Class type not found.");
+      if (symbol_argumentType == NULL)
+        PERROR("class_CreateConstructor", "Class type not found.");
 
       s_symbol *symbol_argument = symbol_CreateEmpty(SYMBOL_ARGUMENT);
       symbol_argument->body.argument = NEW(s_symbolbody_argument);
@@ -1425,7 +1424,8 @@ s_method_def *class_CreateMethod(s_symbol *class, char *name, void (*cb)(s_class
       hash = hash * 147 + 255;
     } else {
       s_symbol *symbol_argumentType = symbol_Find(typeClassName, class->body.class->scope->symbols);
-      if (symbol_argumentType == NULL) PERROR("class_CreateMethod", "Class type not found.");
+      if (symbol_argumentType == NULL)
+        PERROR("class_CreateMethod", "Class type not found.");
 
       s_symbol *symbol_argument = symbol_CreateEmpty(SYMBOL_ARGUMENT);
       symbol_argument->body.argument = NEW(s_symbolbody_argument);
@@ -1522,6 +1522,7 @@ void* class_DeriveFrom(s_symbol* dest, s_symbol* src) {
   l_item = list_get_first(l);
   for (idx = 0; idx < l->items_count; idx++) {
     list_push(class_symbol->body.class->fields, l_item->payload);
+    // scope_AddSymbol(dest->body.class->scope, l_item->payload);
     l_item = list_get_next(l_item);
   }
 
@@ -1530,6 +1531,7 @@ void* class_DeriveFrom(s_symbol* dest, s_symbol* src) {
   l_item = list_get_first(l);
   for (idx = 0; idx < l->items_count; idx++) {
     list_push(class_symbol->body.class->methods, l_item->payload);
+    // scope_AddSymbol(dest->body.class->scope, l_item->payload);
     l_item = list_get_next(l_item);
   }
 
@@ -1538,6 +1540,7 @@ void* class_DeriveFrom(s_symbol* dest, s_symbol* src) {
   l_item = list_get_first(l);
   for (idx = 0; idx < l->items_count; idx++) {
     list_push(class_symbol->body.class->constructors, l_item->payload);
+    // scope_AddSymbol(dest->body.class->scope, l_item->payload);
     l_item = list_get_next(l_item);
   }
 
@@ -1716,7 +1719,7 @@ s_statement *compile_ClassDefinition(s_symbol *symbol, s_compiler *compiler, s_s
     // Create sub scope
     ret->scope = scope_Create(parent_symbol->body.class->scope);
     class_symbol->body.class->scope = ret->scope;
-  
+
     class_DeriveFrom(class_symbol, parent_symbol);
   }
 
@@ -2768,6 +2771,36 @@ void object_Destructor(s_class_instance **ret, s_class_instance *self, s_class_i
 
     free(self);
   }
+}
+
+void object_Field(s_class_instance **ret, s_class_instance *self, s_class_instance **args) {
+  s_string *name = (s_string *)args[0]->data.payload;
+
+  char *field_name = name->content;
+  int field_hash = hashOfSymbol(field_name);
+
+  s_list *fields = self->class->body.class->fields;
+
+  uint64_t symbol_index = 0;
+  s_symbol *symbol_ptr = list_read_first(fields);
+  uint64_t symbol_ptr_index = 0;
+  bool found_symbol = false;
+  while (symbol_ptr != NULL) {
+    if (symbol_ptr->hash == field_hash) {
+      if (!memcmp(symbol_ptr->name, field_name, symbol_ptr->length)) {
+        found_symbol = true;
+        break;
+      }
+    }
+    symbol_index++;
+    symbol_ptr = list_read_next(fields);
+  }
+
+  if (!found_symbol)
+    PERROR("object_Field", "Unable to find field '%s' using reflection.", field_name);
+
+  s_class_instance *instance = self->data.fields[symbol_index];
+  *ret = instance;
 }
 
 /* ##### STDLIB 3rd avenue ##### */
